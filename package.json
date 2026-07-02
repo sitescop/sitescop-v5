@@ -1,0 +1,42 @@
+{
+  "name": "sitescop-v5",
+  "private": true,
+  "version": "5.0.0",
+  "packageManager": "npm@11.16.0",
+  "description": "SiteScop Inspection Platform V5",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:turbo": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "npm run db:generate --workspace=@sitescop/api",
+    "db:migrate": "npm run db:deploy --workspace=@sitescop/api",
+    "db:deploy": "npm run db:deploy --workspace=@sitescop/api",
+    "db:seed": "npm run db:seed --workspace=@sitescop/api",
+    "db:studio": "npm run db:studio --workspace=@sitescop/api",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
+  },
+  "devDependencies": {
+    "embedded-postgres": "^17.10.0-beta.17",
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.25.12": true,
+    "prisma@6.19.3": true,
+    "embedded-postgres@17.10.0-beta.17": true,
+    "@embedded-postgres/windows-x64@17.10.0-beta.17": true
+  }
+}

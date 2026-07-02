@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sitescop-v5-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sitescop
+      POSTGRES_PASSWORD: sitescop_dev
+      POSTGRES_DB: sitescop_v5
+    ports:
+      - '5432:5432'
+    volumes:
+      - sitescop_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sitescop -d sitescop_v5']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: sitescop-v5-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - sitescop_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  sitescop_pg_data:
+  sitescop_redis_data:

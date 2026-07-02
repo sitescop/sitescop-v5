@@ -1,0 +1,15 @@
+{
+  "name": "@sitescop/room-engine-core",
+  "version": "5.0.0",
+  "private": true,
+  "description": "Bedroom and Bathroom room engines — implemented in Phase 3",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
