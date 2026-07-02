@@ -4,7 +4,7 @@ import { getDashboardDataForUser } from './dashboard.service.js';
 
 export async function registerDashboardRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/v1/dashboard', { preHandler: requireAuth() }, async (request, reply) => {
-    const data = getDashboardDataForUser(request.authUser!);
+    const data = await getDashboardDataForUser(request.authUser!);
     return reply.send(data);
   });
 }

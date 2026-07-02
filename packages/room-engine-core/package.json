@@ -2,6 +2,7 @@
   "name": "@sitescop/room-engine-core",
   "version": "5.0.0",
   "private": true,
+  "type": "module",
   "description": "Bedroom and Bathroom room engines — implemented in Phase 3",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

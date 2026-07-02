@@ -6,6 +6,12 @@ import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { registerDashboardRoutes } from './modules/dashboard/dashboard.routes.js';
+import { registerJobsRoutes } from './modules/jobs/jobs.routes.js';
+import { registerCrmRoutes } from './modules/crm/crm.routes.js';
+import { registerSettingsRoutes } from './modules/settings/settings.routes.js';
+import { registerAdminRoutes } from './modules/admin/admin.routes.js';
+import { registerAgreementsRoutes } from './modules/agreements/agreements.routes.js';
+import { registerInspectionsRoutes } from './modules/inspections/inspections.routes.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -13,6 +19,7 @@ export async function buildApp() {
       level: config.nodeEnv === 'development' ? 'info' : 'warn',
     },
     trustProxy: true,
+    bodyLimit: 50 * 1024 * 1024,
   });
 
   await app.register(helmet, {
@@ -38,13 +45,28 @@ export async function buildApp() {
   app.get('/api/v1/health', async () => ({
     status: 'ok',
     version: '5.0.0',
-    phase: '0',
+    phase: '3',
   }));
 
   await registerAuthRoutes(app);
   await registerDashboardRoutes(app);
+  await registerJobsRoutes(app);
+  await registerCrmRoutes(app);
+  await registerSettingsRoutes(app);
+  await registerAdminRoutes(app);
+  await registerAgreementsRoutes(app);
+  await registerInspectionsRoutes(app);
 
   app.setErrorHandler((error, request, reply) => {
+    if (error instanceof Error && 'statusCode' in error && typeof error.statusCode === 'number') {
+      const fastifyError = error as Error & { statusCode: number; code?: string };
+      if (fastifyError.statusCode < 500) {
+        return reply.status(fastifyError.statusCode).send({
+          error: fastifyError.message,
+          code: fastifyError.code ?? 'REQUEST_ERROR',
+        });
+      }
+    }
     request.log.error(error);
     reply.status(500).send({ error: 'Internal server error', code: 'INTERNAL_ERROR' });
   });

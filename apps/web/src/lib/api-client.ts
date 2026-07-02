@@ -17,16 +17,19 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, headers, ...rest } = options;
+  const { body, headers, method = 'GET', ...rest } = options;
+  const mutating = method !== 'GET' && method !== 'HEAD';
+  const payload = body !== undefined ? JSON.stringify(body) : mutating ? '{}' : undefined;
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...rest,
+    method,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(mutating ? { 'Content-Type': 'application/json' } : {}),
       ...headers,
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: payload,
   });
 
   const data = await response.json().catch(() => ({}));

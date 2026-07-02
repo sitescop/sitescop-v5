@@ -71,7 +71,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Admin',
     href: '/admin',
     icon: 'Shield',
-    permission: 'users:manage',
+    permission: 'users:view',
   },
   {
     id: 'settings',

@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@sitescop/eslint-config": "*",
+    "@sitescop/room-engine-core": "*",
     "typescript": "^5.8.3"
   }
 }

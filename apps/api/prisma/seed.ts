@@ -1,5 +1,17 @@
-import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
-import { hashPassword } from '../src/shared/auth/crypto.js';
+import {
+  PrismaClient,
+  UserRole,
+  UserStatus,
+  JobStatus,
+  JobType,
+  ContactType,
+  ContactStatus,
+  AgreementStatus,
+  InspectionStatus,
+  InspectionRoomType,
+} from '@prisma/client';
+import { buildRoomsFromCounts, createEmptyFormData } from '@sitescop/room-engine-core';
+import { hashPassword, hashToken } from '../src/shared/auth/crypto.js';
 
 const prisma = new PrismaClient();
 
@@ -85,8 +97,30 @@ async function main() {
     },
   });
 
+  await prisma.companySettings.upsert({
+    where: { companyId: company.id },
+    update: {},
+    create: {
+      companyId: company.id,
+      emailFromName: 'SiteScop Demo Inspections',
+      emailFromAddress: 'info@sitescop-demo.com.au',
+      defaultBuildingPrice: 45000,
+      defaultPestPrice: 35000,
+      defaultCombinedPrice: 65000,
+      emailTemplates: {
+        jobAssigned: 'Hi {{inspectorName}}, you have been assigned job {{jobNumber}}.',
+        jobCompleted: 'Job {{jobNumber}} has been completed.',
+      },
+      smsTemplates: {
+        jobReminder: 'Reminder: inspection {{jobNumber}} scheduled for {{date}}.',
+      },
+    },
+  });
+
+  const usersByEmail: Record<string, string> = {};
+
   for (const seedUser of seedUsers) {
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { email: seedUser.email },
       update: {
         firstName: seedUser.firstName,
@@ -106,11 +140,247 @@ async function main() {
         companyId: seedUser.companySlug ? company.id : null,
       },
     });
+    usersByEmail[seedUser.email] = user.id;
   }
+
+  const clientContact = await prisma.contact.upsert({
+    where: { id: 'seed-client-contact' },
+    update: {},
+    create: {
+      id: 'seed-client-contact',
+      companyId: company.id,
+      type: ContactType.CLIENT,
+      status: ContactStatus.ACTIVE,
+      firstName: 'Sarah',
+      lastName: 'Mitchell',
+      email: 'sarah.mitchell@example.com',
+      phone: '0412 345 678',
+      address: '45 Ocean Street, Bondi NSW 2026',
+    },
+  });
+
+  const agentContact = await prisma.contact.upsert({
+    where: { id: 'seed-agent-contact' },
+    update: {},
+    create: {
+      id: 'seed-agent-contact',
+      companyId: company.id,
+      type: ContactType.AGENT,
+      status: ContactStatus.ACTIVE,
+      firstName: 'James',
+      lastName: 'Harper',
+      email: 'james@premierrealty.com.au',
+      phone: '0423 456 789',
+      companyName: 'Premier Realty',
+    },
+  });
+
+  await prisma.contact.upsert({
+    where: { id: 'seed-builder-contact' },
+    update: {},
+    create: {
+      id: 'seed-builder-contact',
+      companyId: company.id,
+      type: ContactType.BUILDER,
+      status: ContactStatus.ACTIVE,
+      firstName: 'BuildCo',
+      lastName: 'Construction',
+      email: 'projects@buildco.com.au',
+      phone: '1300 BUILD',
+      companyName: 'BuildCo Construction',
+      abn: '98 765 432 109',
+    },
+  });
+
+  const property = await prisma.property.upsert({
+    where: { id: 'seed-property-1' },
+    update: {},
+    create: {
+      id: 'seed-property-1',
+      companyId: company.id,
+      addressLine1: '45 Ocean Street',
+      suburb: 'Bondi',
+      state: 'NSW',
+      postcode: '2026',
+    },
+  });
+
+  const adminId = usersByEmail['admin@sitescop-demo.com.au'];
+  const inspectorId = usersByEmail['inspector@sitescop-demo.com.au'];
+
+  await prisma.job.upsert({
+    where: { id: 'seed-job-1' },
+    update: {},
+    create: {
+      id: 'seed-job-1',
+      companyId: company.id,
+      jobNumber: `JOB-${new Date().getFullYear()}-0001`,
+      title: 'Pre-Purchase Building Inspection',
+      description: 'Full building inspection for property purchase.',
+      type: JobType.PRE_PURCHASE,
+      status: JobStatus.ASSIGNED,
+      propertyId: property.id,
+      clientContactId: clientContact.id,
+      agentContactId: agentContact.id,
+      scheduledDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      scheduledTime: '10:00',
+      priceCents: 45000,
+      assignedInspectorId: inspectorId,
+      createdById: adminId,
+    },
+  });
+
+  await prisma.job.upsert({
+    where: { id: 'seed-job-2' },
+    update: {},
+    create: {
+      id: 'seed-job-2',
+      companyId: company.id,
+      jobNumber: `JOB-${new Date().getFullYear()}-0002`,
+      title: 'Pest Inspection — Unit 12',
+      type: JobType.PEST,
+      status: JobStatus.PENDING_ASSIGNMENT,
+      clientContactId: clientContact.id,
+      priceCents: 35000,
+      createdById: adminId,
+    },
+  });
+
+  const year = new Date().getFullYear();
+  const legalSections = {
+    sections: [
+      { id: 'terms', title: 'Terms & Conditions', content: 'Standard inspection terms apply.' },
+      { id: 'declaration', title: 'Client Declaration', content: 'Client accepts the inspection agreement.' },
+    ],
+  };
+
+  await prisma.agreement.upsert({
+    where: { id: 'seed-agreement-1' },
+    update: {},
+    create: {
+      id: 'seed-agreement-1',
+      companyId: company.id,
+      agreementNumber: `AGR-${year}-0001`,
+      jobId: 'seed-job-1',
+      status: AgreementStatus.DRAFT,
+      type: JobType.PRE_PURCHASE,
+      clientContactId: clientContact.id,
+      clientName: 'Sarah Mitchell',
+      clientEmail: 'sarah.mitchell@example.com',
+      clientPhone: '0412 345 678',
+      propertyAddress: '45 Ocean Street, Bondi NSW 2026',
+      priceCents: 45000,
+      gstCents: 4500,
+      totalCents: 49500,
+      legalSections,
+      createdById: adminId,
+    },
+  });
+
+  const demoSigningToken = 'demo-agreement-2-signing-token';
+  const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  await prisma.agreement.upsert({
+    where: { id: 'seed-agreement-2' },
+    update: {
+      accessTokenHash: hashToken(demoSigningToken),
+      accessTokenExpiresAt: tokenExpiresAt,
+      expiresAt: tokenExpiresAt,
+    },
+    create: {
+      id: 'seed-agreement-2',
+      companyId: company.id,
+      agreementNumber: `AGR-${year}-0002`,
+      jobId: 'seed-job-2',
+      status: AgreementStatus.SENT,
+      type: JobType.PEST,
+      clientContactId: clientContact.id,
+      clientName: 'Sarah Mitchell',
+      clientEmail: 'sarah.mitchell@example.com',
+      propertyAddress: 'Address to be confirmed',
+      priceCents: 35000,
+      gstCents: 3500,
+      totalCents: 38500,
+      legalSections,
+      sentAt: new Date(),
+      accessTokenHash: hashToken(demoSigningToken),
+      accessTokenExpiresAt: tokenExpiresAt,
+      expiresAt: tokenExpiresAt,
+      createdById: adminId,
+    },
+  });
+
+  const seedFormData = createEmptyFormData({
+    jobNumber: `JOB-${year}-0001`,
+    clientName: 'Sarah Mitchell',
+    clientEmail: 'sarah.mitchell@example.com',
+    clientPhone: '0412 345 678',
+    agentName: 'James Agent',
+    agentPhone: '0400 111 222',
+    agentEmail: 'james.agent@example.com',
+    propertyAddress: '45 Ocean Street, Bondi NSW 2026',
+    scheduledDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    scheduledTime: '10:00',
+    inspectorName: 'Demo Inspector',
+    inspectorLicence: 'NSW-123456',
+  });
+  seedFormData.propertyDescription.bedroomCount = 3;
+  seedFormData.propertyDescription.bathroomCount = 2;
+  seedFormData.propertyDescription.livingAreaCount = 2;
+  seedFormData.propertyDescription.garageCount = 1;
+
+  const seedRooms = buildRoomsFromCounts({
+    bedrooms: 3,
+    bathrooms: 2,
+    livingAreas: 2,
+    garages: 1,
+  });
+
+  await prisma.job.update({
+    where: { id: 'seed-job-1' },
+    data: { status: JobStatus.IN_PROGRESS },
+  });
+
+  await prisma.inspection.upsert({
+    where: { id: 'seed-inspection-1' },
+    update: {
+      status: InspectionStatus.IN_PROGRESS,
+      progressPercent: 12,
+      completedAt: null,
+    },
+    create: {
+      id: 'seed-inspection-1',
+      companyId: company.id,
+      inspectionNumber: `INSP-${year}-0001`,
+      jobId: 'seed-job-1',
+      status: InspectionStatus.IN_PROGRESS,
+      inspectorId,
+      formData: seedFormData,
+      progressPercent: 12,
+      startedAt: new Date(),
+      createdById: adminId,
+      rooms: {
+        create: seedRooms.map((room) => ({
+          roomType:
+            room.roomType === 'bedroom'
+              ? InspectionRoomType.BEDROOM
+              : room.roomType === 'bathroom'
+                ? InspectionRoomType.BATHROOM
+                : room.roomType === 'living'
+                  ? InspectionRoomType.LIVING
+                  : InspectionRoomType.GARAGE,
+          roomIndex: room.roomIndex,
+          label: room.label,
+          data: room.data,
+        })),
+      },
+    },
+  });
 
   console.log('Seed complete.');
   console.log(`Default password for all seeded users: ${DEFAULT_PASSWORD}`);
   console.log('Demo company: SiteScop Demo Inspections (sitescop-demo)');
+  console.log(`Demo signing URL (agreement 2): http://localhost:5173/sign/${demoSigningToken}`);
 }
 
 main()

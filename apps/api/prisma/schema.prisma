@@ -24,6 +24,67 @@ enum UserStatus {
   DEACTIVATED
 }
 
+enum JobStatus {
+  DRAFT
+  PENDING_ASSIGNMENT
+  ASSIGNED
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+enum JobType {
+  BUILDING
+  PEST
+  COMBINED
+  PRE_PURCHASE
+  PRE_SALE
+  OTHER
+}
+
+enum AssignmentStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum ContactType {
+  CLIENT
+  AGENT
+  BUILDER
+  PROPERTY_MANAGER
+}
+
+enum ContactStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AgreementStatus {
+  DRAFT
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+  EXPIRED
+  CANCELLED
+}
+
+enum InspectionStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum InspectionRoomType {
+  BEDROOM
+  BATHROOM
+  LIVING
+  GARAGE
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -37,6 +98,13 @@ model Company {
   updatedAt DateTime @updatedAt
   users     User[]
   auditLogs AuditLog[]
+  contacts  Contact[]
+  properties Property[]
+  jobs        Job[]
+  agreements  Agreement[]
+  inspections Inspection[]
+  settings    CompanySettings?
+  apiKeys     ApiKey[]
 
   @@map("companies")
 }
@@ -57,6 +125,13 @@ model User {
   sessions     UserSession[]
   passwordResetTokens PasswordResetToken[]
   auditLogs    AuditLog[] @relation("AuditActor")
+  createdJobs  Job[]      @relation("JobCreator")
+  assignedJobs Job[]      @relation("JobInspector")
+  jobAssignments JobAssignment[] @relation("AssignmentInspector")
+  assignmentsMade JobAssignment[] @relation("AssignmentAssigner")
+  createdAgreements Agreement[] @relation("AgreementCreator")
+  inspections       Inspection[] @relation("InspectionInspector")
+  createdInspections Inspection[] @relation("InspectionCreator")
 
   @@index([companyId])
   @@index([role])
@@ -108,4 +183,248 @@ model AuditLog {
   @@index([actorId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model Contact {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type        ContactType
+  status      ContactStatus @default(ACTIVE)
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  companyName String?
+  abn         String?
+  address     String?
+  notes       String?
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  clientJobs  Job[]         @relation("JobClient")
+  agentJobs   Job[]         @relation("JobAgent")
+  agreements  Agreement[]
+
+  @@index([companyId])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("contacts")
+}
+
+model Property {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  addressLine1 String
+  addressLine2 String?
+  suburb       String
+  state        String
+  postcode     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  jobs         Job[]
+
+  @@index([companyId])
+  @@map("properties")
+}
+
+model Job {
+  id                   String     @id @default(cuid())
+  companyId            String
+  company              Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobNumber            String
+  title                String
+  description          String?
+  type                 JobType    @default(BUILDING)
+  status               JobStatus  @default(DRAFT)
+  propertyId           String?
+  property             Property?  @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  clientContactId      String?
+  clientContact        Contact?   @relation("JobClient", fields: [clientContactId], references: [id], onDelete: SetNull)
+  agentContactId       String?
+  agentContact         Contact?   @relation("JobAgent", fields: [agentContactId], references: [id], onDelete: SetNull)
+  scheduledDate        DateTime?
+  scheduledTime        String?
+  priceCents           Int?
+  notes                String?
+  assignedInspectorId  String?
+  assignedInspector    User?      @relation("JobInspector", fields: [assignedInspectorId], references: [id], onDelete: SetNull)
+  createdById          String
+  createdBy            User       @relation("JobCreator", fields: [createdById], references: [id])
+  assignments          JobAssignment[]
+  agreements           Agreement[]
+  inspections          Inspection[]
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  archivedAt           DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@unique([companyId, jobNumber])
+  @@index([companyId])
+  @@index([status])
+  @@index([assignedInspectorId])
+  @@index([deletedAt])
+  @@index([archivedAt])
+  @@map("jobs")
+}
+
+model JobAssignment {
+  id             String           @id @default(cuid())
+  jobId          String
+  job            Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  inspectorId    String
+  inspector      User             @relation("AssignmentInspector", fields: [inspectorId], references: [id])
+  assignedById   String
+  assignedBy     User             @relation("AssignmentAssigner", fields: [assignedById], references: [id])
+  status         AssignmentStatus @default(PENDING)
+  declineReason  String?
+  respondedAt    DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([jobId])
+  @@index([inspectorId])
+  @@map("job_assignments")
+}
+
+model CompanySettings {
+  id                    String   @id @default(cuid())
+  companyId             String   @unique
+  company               Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  primaryColor          String   @default("#0B6E4F")
+  secondaryColor        String   @default("#1E3A5F")
+  reportHeader          String?
+  reportFooter          String?
+  emailFromName         String?
+  emailFromAddress      String?
+  emailSignature        String?
+  smsEnabled            Boolean  @default(false)
+  smsSenderId           String?
+  pdfFooterText         String?
+  pdfIncludeLogo        Boolean  @default(true)
+  notifyNewJob          Boolean  @default(true)
+  notifyJobAssigned     Boolean  @default(true)
+  notifyJobCompleted    Boolean  @default(true)
+  defaultBuildingPrice  Int?
+  defaultPestPrice      Int?
+  defaultCombinedPrice  Int?
+  gstRate               Float    @default(10)
+  emailTemplates        Json     @default("{}")
+  smsTemplates          Json     @default("{}")
+  integrations          Json     @default("{}")
+  agreementTemplates    Json     @default("{}")
+  backupEnabled         Boolean  @default(false)
+  backupFrequency       String   @default("weekly")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name       String
+  keyPrefix  String
+  keyHash    String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([companyId])
+  @@map("api_keys")
+}
+
+model Agreement {
+  id                    String          @id @default(cuid())
+  companyId             String
+  company               Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agreementNumber       String
+  jobId                 String?
+  job                   Job?            @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  status                AgreementStatus @default(DRAFT)
+  type                  JobType         @default(BUILDING)
+  clientContactId       String?
+  clientContact         Contact?        @relation(fields: [clientContactId], references: [id], onDelete: SetNull)
+  clientName            String
+  clientEmail           String
+  clientPhone           String?
+  propertyAddress       String
+  priceCents            Int             @default(0)
+  gstCents              Int             @default(0)
+  totalCents            Int             @default(0)
+  agreementDate         DateTime        @default(now())
+  notes                 String?
+  legalSections         Json            @default("{}")
+  accessTokenHash       String?         @unique
+  accessTokenExpiresAt  DateTime?
+  sentAt                DateTime?
+  viewedAt              DateTime?
+  signedAt              DateTime?
+  declinedAt            DateTime?
+  cancelledAt           DateTime?
+  expiresAt             DateTime?
+  declineReason         String?
+  signatureName         String?
+  signatureData         String?
+  signedIp              String?
+  declarationsAccepted  Boolean         @default(false)
+  createdById           String
+  createdBy             User            @relation("AgreementCreator", fields: [createdById], references: [id])
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@unique([companyId, agreementNumber])
+  @@index([companyId])
+  @@index([status])
+  @@index([jobId])
+  @@index([clientEmail])
+  @@map("agreements")
+}
+
+model Inspection {
+  id               String           @id @default(cuid())
+  companyId        String
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionNumber String
+  jobId            String
+  job              Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status           InspectionStatus @default(DRAFT)
+  inspectorId      String?
+  inspector        User?            @relation("InspectionInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
+  formData         Json             @default("{}")
+  progressPercent  Int              @default(0)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdById      String
+  createdBy        User             @relation("InspectionCreator", fields: [createdById], references: [id])
+  rooms            InspectionRoom[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([companyId, inspectionNumber])
+  @@index([companyId])
+  @@index([jobId])
+  @@index([status])
+  @@index([inspectorId])
+  @@map("inspections")
+}
+
+model InspectionRoom {
+  id           String             @id @default(cuid())
+  inspectionId String
+  inspection   Inspection         @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  roomType     InspectionRoomType
+  roomIndex    Int
+  label        String
+  data         Json               @default("{}")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@unique([inspectionId, roomType, roomIndex])
+  @@index([inspectionId])
+  @@map("inspection_rooms")
 }

@@ -28,4 +28,12 @@
   .form-error {
     @apply mt-1 text-sm text-danger;
   }
+
+  .inspection-subsection-heading {
+    @apply mb-2 border-b border-primary/25 pb-1.5 text-base font-semibold text-primary;
+  }
+
+  .inspection-field-label {
+    @apply mb-1.5 block text-base font-semibold text-primary;
+  }
 }

@@ -49,3 +49,26 @@ export function RequirePermission({ permission, children, fallback }: RequirePer
 
   return <>{children}</>;
 }
+
+interface RequireAnyPermissionProps {
+  permissions: Permission[];
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+export function RequireAnyPermission({ permissions, children, fallback }: RequireAnyPermissionProps) {
+  const hasAny = useAuthStore((s) => permissions.some((p) => s.hasPermission(p)));
+
+  if (!hasAny) {
+    return (
+      fallback ?? (
+        <div className="rounded-xl border border-border bg-surface p-8 text-center shadow-card">
+          <h2 className="text-lg font-semibold text-text">Access denied</h2>
+          <p className="mt-2 text-text-light">You do not have permission to view this page.</p>
+        </div>
+      )
+    );
+  }
+
+  return <>{children}</>;
+}

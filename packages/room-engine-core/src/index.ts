@@ -1,9 +1,9 @@
-/** Room engine types — full implementation delivered in Phase 3 (Inspection Engine). */
-export type RoomEngineType = 'bedroom' | 'bathroom';
-
-export interface RoomEngineMetadata {
-  engineType: RoomEngineType;
-  version: string;
-}
-
-export const ROOM_ENGINE_VERSION = '5.0.0';
+export * from './types.js';
+export * from './options.js';
+export * from './defaults.js';
+export * from './conclusion.js';
+export * from './pest-types.js';
+export * from './pest-options.js';
+export * from './pest-defaults.js';
+export * from './pest-conclusion.js';
+export * from './form-data.js';

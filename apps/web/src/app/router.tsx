@@ -1,12 +1,19 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppShell } from '@/design-system/layouts/AppShell';
-import { RequireAuth, RequirePermission } from '@/modules/auth/components/RequireAuth';
+import { RequireAuth, RequirePermission, RequireAnyPermission } from '@/modules/auth/components/RequireAuth';
 import { LoginPage } from '@/modules/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/modules/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/modules/auth/pages/ResetPasswordPage';
 import { DashboardPage } from '@/modules/dashboard/pages/DashboardPage';
 import { ModulePlaceholder } from '@/design-system/components/ModulePlaceholder';
+import { JobsRoutes } from '@/modules/jobs/JobsRoutes';
+import { CrmRoutes } from '@/modules/crm/CrmRoutes';
+import { SettingsRoutes } from '@/modules/settings/SettingsRoutes';
+import { AdminRoutes } from '@/modules/admin/AdminRoutes';
+import { AgreementsRoutes } from '@/modules/agreements/AgreementsRoutes';
+import { AgreementSignPage } from '@/modules/agreements/pages/AgreementSignPage';
+import { InspectionsRoutes } from '@/modules/inspections/InspectionsRoutes';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +32,7 @@ export function AppRouter() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/sign/:token" element={<AgreementSignPage />} />
 
           <Route
             element={
@@ -40,7 +48,7 @@ export function AppRouter() {
               path="jobs/*"
               element={
                 <RequirePermission permission="jobs:view">
-                  <ModulePlaceholder title="Jobs" description="Inspection job management" phase="Phase 1" />
+                  <JobsRoutes />
                 </RequirePermission>
               }
             />
@@ -49,7 +57,7 @@ export function AppRouter() {
               path="agreements/*"
               element={
                 <RequirePermission permission="agreements:view">
-                  <ModulePlaceholder title="Agreements" description="Client agreement management" phase="Phase 2" />
+                  <AgreementsRoutes />
                 </RequirePermission>
               }
             />
@@ -58,7 +66,7 @@ export function AppRouter() {
               path="inspections/*"
               element={
                 <RequirePermission permission="inspections:view">
-                  <ModulePlaceholder title="Inspections" description="Field inspection modules" phase="Phase 3" />
+                  <InspectionsRoutes />
                 </RequirePermission>
               }
             />
@@ -67,7 +75,7 @@ export function AppRouter() {
               path="crm/*"
               element={
                 <RequirePermission permission="crm:view">
-                  <ModulePlaceholder title="CRM" description="Clients, agents, and contacts" phase="Phase 1" />
+                  <CrmRoutes />
                 </RequirePermission>
               }
             />
@@ -102,9 +110,17 @@ export function AppRouter() {
             <Route
               path="admin/*"
               element={
-                <RequirePermission permission="users:manage">
-                  <ModulePlaceholder title="Admin" description="User and company administration" phase="Phase 1" />
-                </RequirePermission>
+                <RequireAnyPermission
+                  permissions={[
+                    'users:manage',
+                    'users:view',
+                    'audit:view',
+                    'jobs:view_all',
+                    'companies:view_all',
+                  ]}
+                >
+                  <AdminRoutes />
+                </RequireAnyPermission>
               }
             />
 
@@ -112,7 +128,7 @@ export function AppRouter() {
               path="settings/*"
               element={
                 <RequirePermission permission="settings:view">
-                  <ModulePlaceholder title="Settings" description="Company and platform settings" phase="Phase 1" />
+                  <SettingsRoutes />
                 </RequirePermission>
               }
             />
