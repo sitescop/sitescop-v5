@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { Copy, Send } from 'lucide-react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { Copy, Download, Send } from 'lucide-react';
 import { AgreementStatus } from '@sitescop/shared-types';
 import { agreementsApi } from '@/lib/api/agreements';
 import { useAuthStore } from '@/modules/auth/store/auth-store';
@@ -16,11 +16,19 @@ import {
 
 export function AgreementDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const sentState = location.state as {
+    justSent?: boolean;
+    emailSent?: boolean;
+    contactCreated?: boolean;
+    signingUrl?: string;
+  } | null;
   const queryClient = useQueryClient();
   const canSend = useAuthStore((s) => s.hasPermission('agreements:send'));
   const canManage = useAuthStore((s) => s.hasPermission('agreements:manage'));
   const [signingUrl, setSigningUrl] = useState<string | null>(null);
   const [showUrlModal, setShowUrlModal] = useState(false);
+  const [emailSent, setEmailSent] = useState<boolean | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['agreement', id],
@@ -37,6 +45,7 @@ export function AgreementDetailPage() {
     mutationFn: () => agreementsApi.send(id!),
     onSuccess: (result) => {
       setSigningUrl(result.devSigningUrl ?? result.signingUrl);
+      setEmailSent(result.emailSent);
       setShowUrlModal(true);
       invalidate();
     },
@@ -46,6 +55,14 @@ export function AgreementDetailPage() {
     mutationFn: () => agreementsApi.cancel(id!),
     onSuccess: invalidate,
   });
+
+  useEffect(() => {
+    if (sentState?.justSent && sentState.signingUrl && sentState.emailSent === false) {
+      setSigningUrl(sentState.signingUrl);
+      setEmailSent(false);
+      setShowUrlModal(true);
+    }
+  }, [sentState]);
 
   if (isLoading) return <LoadingOverlay message="Loading agreement..." fullScreen={false} />;
   if (error || !data) {
@@ -87,6 +104,13 @@ export function AgreementDetailPage() {
                 {agreement.status === AgreementStatus.DRAFT ? 'Send to Client' : 'Resend'}
               </Button>
             )}
+            <Button
+              variant="secondary"
+              onClick={() => void agreementsApi.downloadPdf(agreement.id, `${agreement.agreementNumber}.pdf`)}
+            >
+              <Download className="h-4 w-4" />
+              Download PDF
+            </Button>
             {canManage && agreement.status !== AgreementStatus.SIGNED && (
               <Button
                 variant="danger"
@@ -100,9 +124,56 @@ export function AgreementDetailPage() {
         }
       />
 
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <AgreementStatusBadge status={agreement.status} />
       </div>
+
+      {sentState?.justSent && (
+        <div
+          className={`mb-6 rounded-sm border px-4 py-3 text-sm text-text ${
+            sentState.emailSent
+              ? 'border-success/40 bg-success/10'
+              : 'border-warning/40 bg-warning/10'
+          }`}
+        >
+          <p className="font-medium">
+            {sentState.emailSent ? 'Agreement emailed successfully' : 'Agreement created — email not sent yet'}
+          </p>
+          <p className="mt-1">
+            Client saved in CRM{sentState.contactCreated ? ' (new contact)' : ''}.
+          </p>
+          <p className="mt-1">
+            <strong>To (client):</strong> {agreement.clientEmail}
+          </p>
+          {!sentState.emailSent && (
+            <p className="mt-2">
+              SMTP is not running or not configured. Copy the signing link from the popup and send it
+              to the client (SMS, WhatsApp, or paste into an email). For local testing, start Mailpit
+              and restart the API — see instructions below.
+            </p>
+          )}
+        </div>
+      )}
+
+      {agreement.status === AgreementStatus.SIGNED && !agreement.jobId && (
+        <div className="mb-6 rounded-sm border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-text">
+          Client signed. Invoice was emailed automatically. When payment is received, go to{' '}
+          <Link className="font-medium text-primary hover:underline" to="/accounts">
+            Accounts
+          </Link>{' '}
+          and click <strong>Mark as Paid</strong> — a job will be created and you can assign an inspector.
+        </div>
+      )}
+
+      {agreement.jobId && (
+        <div className="mb-6 rounded-sm border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-text">
+          Job{' '}
+          <Link className="font-medium text-primary hover:underline" to={`/jobs/${agreement.jobId}`}>
+            {agreement.jobNumber}
+          </Link>{' '}
+          is ready — open it to assign an inspector.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="space-y-4 p-6 lg:col-span-2">
@@ -181,11 +252,21 @@ export function AgreementDetailPage() {
       <Modal
         open={showUrlModal}
         onClose={() => setShowUrlModal(false)}
-        title="Agreement Sent"
+        title={emailSent ? 'Agreement Sent' : 'Copy Signing Link for Client'}
         footer={<Button onClick={() => setShowUrlModal(false)}>Done</Button>}
       >
         <p className="mb-3 text-sm text-text-light">
-          Share this secure link with the client to review and sign the agreement.
+          {emailSent ? (
+            <>
+              The agreement was emailed to <strong>{agreement.clientEmail}</strong>. You can also
+              share the link below if needed.
+            </>
+          ) : (
+            <>
+              Email could not be delivered to <strong>{agreement.clientEmail}</strong>. Copy the link
+              below and send it to the client manually.
+            </>
+          )}
         </p>
         {signingUrl && (
           <div className="flex gap-2">

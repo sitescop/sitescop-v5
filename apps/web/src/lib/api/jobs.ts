@@ -43,4 +43,9 @@ export const jobsApi = {
     apiRequest<{ success: true }>(`/api/v1/jobs/${id}/permanent`, { method: 'DELETE' }),
   listInspectors: () =>
     apiRequest<{ inspectors: UserSummary[] }>('/api/v1/jobs/inspectors'),
+  sendAgreement: (id: string) =>
+    apiRequest<import('@sitescop/shared-types').SendJobAgreementResponse>(
+      `/api/v1/jobs/${id}/send-agreement`,
+      { method: 'POST' },
+    ),
 };

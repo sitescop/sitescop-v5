@@ -31,6 +31,15 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local dev inbox — web UI at http://localhost:8025 (captures all outbound email)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: sitescop-v5-mailpit
+    restart: unless-stopped
+    ports:
+      - '8025:8025'
+      - '1025:1025'
+
 volumes:
   sitescop_pg_data:
   sitescop_redis_data:

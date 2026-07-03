@@ -88,7 +88,7 @@ export function AgreementsListPage() {
     <div>
       <PageHeader
         title="Agreements"
-        description="Create, send, and track client inspection agreements"
+        description="Send and track client agreements — start here for new enquiries"
         breadcrumbs={[{ label: 'Agreements' }]}
         actions={
           <div className="flex flex-wrap gap-2">

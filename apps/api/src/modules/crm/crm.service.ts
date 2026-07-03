@@ -9,12 +9,12 @@ import type {
 } from '@sitescop/shared-types';
 import { z } from 'zod';
 import { createAuditLog } from '../../shared/audit/audit.service.js';
-import { NotFoundError } from '../../shared/http/errors.js';
+import { AppError, NotFoundError } from '../../shared/http/errors.js';
 import { parsePagination } from '../../shared/http/validation.js';
 import { resolveCompanyScope } from '../../shared/scoping/company-scope.js';
 import { prisma } from '../../shared/database/prisma.js';
 
-export const createContactSchema = z.object({
+const contactFieldsSchema = z.object({
   type: z.nativeEnum(ContactType),
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
@@ -27,7 +27,26 @@ export const createContactSchema = z.object({
   status: z.nativeEnum(ContactStatus).optional(),
 });
 
-export const updateContactSchema = createContactSchema.partial();
+function assertClientHasEmail(type: ContactType, email: string | null | undefined): void {
+  if (type === ContactType.CLIENT && !email?.trim()) {
+    throw new AppError(
+      'Client contacts must have an email address so agreements and invoices can be sent.',
+      'VALIDATION_ERROR',
+    );
+  }
+}
+
+export const createContactSchema = contactFieldsSchema.superRefine((data, ctx) => {
+  if (data.type === ContactType.CLIENT && !data.email?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Email is required for clients — used to send agreements and invoices',
+      path: ['email'],
+    });
+  }
+});
+
+export const updateContactSchema = contactFieldsSchema.partial();
 
 function mapContact(contact: ContactRecordSource): ContactRecord {
   return {
@@ -74,6 +93,7 @@ export async function listContacts(
       { firstName: { contains: query.search, mode: 'insensitive' } },
       { lastName: { contains: query.search, mode: 'insensitive' } },
       { email: { contains: query.search, mode: 'insensitive' } },
+      { phone: { contains: query.search, mode: 'insensitive' } },
       { companyName: { contains: query.search, mode: 'insensitive' } },
     ];
   }
@@ -184,6 +204,15 @@ export async function updateContact(
     where: { id, deletedAt: null, ...(companyId ? { companyId } : {}) },
   });
   if (!existing) throw new NotFoundError('Contact not found');
+
+  const nextType = data.type ?? existing.type;
+  const nextEmail =
+    data.email === ''
+      ? null
+      : data.email !== undefined
+        ? data.email
+        : existing.email;
+  assertClientHasEmail(nextType, nextEmail);
 
   const contact = await prisma.contact.update({
     where: { id },

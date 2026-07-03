@@ -344,7 +344,7 @@ export function YesNoSelect({ label, value, onChange, includeNa, disabled = fals
   return (
     <div>
       <label className="inspection-field-label">{label}</label>
-      <select className="input-field" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      <select className="input-field" value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         {options.map((option) => (
           <option key={option || 'blank'} value={option}>
             {option || 'Select...'}
@@ -367,7 +367,7 @@ export function RatingSelect({ label, value, onChange, options, disabled = false
   return (
     <div>
       <label className="inspection-field-label">{label}</label>
-      <select className="input-field" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      <select className="input-field" value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">Select...</option>
         {options.map((option) => (
           <option key={option} value={option}>

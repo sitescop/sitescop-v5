@@ -14,6 +14,7 @@ import {
   listJobs,
   permanentDeleteJob,
   restoreJob,
+  sendJobAgreement,
   softDeleteJob,
   startJob,
   unarchiveJob,
@@ -86,6 +87,20 @@ export async function registerJobsRoutes(app: FastifyInstance): Promise<void> {
         const { id } = request.params as { id: string };
         const job = await updateJob(request.authUser!, id, request.body as never, request);
         return reply.send({ job });
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/api/v1/jobs/:id/send-agreement',
+    { preHandler: [...auth, requirePermission('agreements:send')] },
+    async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const result = await sendJobAgreement(request.authUser!, id, request);
+        return reply.send(result);
       } catch (error) {
         return handleRouteError(error, request, reply);
       }

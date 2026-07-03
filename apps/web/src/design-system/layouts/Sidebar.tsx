@@ -43,6 +43,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   if (!user) return null;
 
   const navItems = getNavItemsForRole(user.role, hasPermission);
+  const companyName = user.company?.name ?? 'SiteScop';
+  const companyAbn = user.company?.abn;
+  const companyPhone = user.company?.phone;
+  const companyWebsite = user.company?.website;
+  const companyLogo = user.company?.logoUrl;
 
   return (
     <>
@@ -63,13 +68,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         aria-label="Main navigation"
       >
         <div className="flex h-topbar items-center border-b border-white/10 px-6">
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-bold">
-              Site<span className="text-accent">Scop</span>
-            </span>
-            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-              V5
-            </span>
+          <div className="flex min-w-0 items-center gap-3">
+            {companyLogo ? (
+              <img
+                src={companyLogo}
+                alt={`${companyName} logo`}
+                className="h-14 max-w-[200px] shrink-0 object-contain"
+              />
+            ) : (
+              <span className="text-xl font-bold">
+                Site<span className="text-accent">Scop</span>
+              </span>
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{companyName}</p>
+              {companyAbn && <p className="truncate text-[11px] text-white/60">ABN {companyAbn}</p>}
+            </div>
           </div>
         </div>
 
@@ -101,7 +115,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         <div className="border-t border-white/10 p-4">
-          <p className="truncate text-xs text-white/60">{user.company?.name ?? 'Platform'}</p>
+          <p className="truncate text-xs text-white/60">{companyName}</p>
+          {companyAbn && <p className="truncate text-[11px] text-white/50">ABN {companyAbn}</p>}
+          {companyPhone && <p className="truncate text-[11px] text-white/50">{companyPhone}</p>}
+          {companyWebsite && (
+            <a
+              href={companyWebsite.startsWith('http') ? companyWebsite : `https://${companyWebsite}`}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate text-[11px] text-accent hover:underline"
+            >
+              {companyWebsite}
+            </a>
+          )}
           <p className="truncate text-sm font-medium">{user.firstName} {user.lastName}</p>
         </div>
       </aside>

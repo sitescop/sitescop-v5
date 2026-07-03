@@ -8,6 +8,7 @@ import {
   verifyPassword,
 } from '../../shared/auth/crypto.js';
 import { mapUserToAuthUser } from '../../shared/auth/user-mapper.js';
+import { syncLegacyDemoBrandingIfNeeded } from '../../shared/branding/sync-legacy-demo-branding.js';
 import { config } from '../../config.js';
 import type { AuthUser } from '@sitescop/shared-types';
 
@@ -191,5 +192,12 @@ export async function getUserById(userId: string): Promise<AuthUser | null> {
     where: { id: userId },
     include: { company: true },
   });
-  return user ? mapUserToAuthUser(user) : null;
+  if (!user) return null;
+
+  if (user.company) {
+    const { company } = await syncLegacyDemoBrandingIfNeeded(user.company);
+    return mapUserToAuthUser({ ...user, company });
+  }
+
+  return mapUserToAuthUser(user);
 }

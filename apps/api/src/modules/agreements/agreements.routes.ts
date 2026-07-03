@@ -6,8 +6,10 @@ import {
   cancelAgreement,
   createAgreement,
   createAgreementFromJob,
+  createAndSendAgreement,
   declinePublicAgreement,
   getAgreement,
+  getAgreementPdfForUser,
   getAgreementTemplate,
   getPublicAgreement,
   listAgreements,
@@ -120,6 +122,23 @@ export async function registerAgreementsRoutes(app: FastifyInstance): Promise<vo
   );
 
   app.get(
+    '/api/v1/agreements/:id/download',
+    { preHandler: [...auth, requirePermission('agreements:view')] },
+    async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const { buffer, fileName } = await getAgreementPdfForUser(request.authUser!, id);
+        return reply
+          .header('Content-Type', 'application/pdf')
+          .header('Content-Disposition', `attachment; filename="${fileName}"`)
+          .send(buffer);
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.get(
     '/api/v1/agreements/:id',
     { preHandler: [...auth, requirePermission('agreements:view')] },
     async (request, reply) => {
@@ -127,6 +146,19 @@ export async function registerAgreementsRoutes(app: FastifyInstance): Promise<vo
         const { id } = request.params as { id: string };
         const agreement = await getAgreement(request.authUser!, id);
         return reply.send({ agreement });
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/api/v1/agreements/send-new',
+    { preHandler: [...auth, requirePermission('agreements:send')] },
+    async (request, reply) => {
+      try {
+        const result = await createAndSendAgreement(request.authUser!, request.body as never, request);
+        return reply.status(201).send(result);
       } catch (error) {
         return handleRouteError(error, request, reply);
       }

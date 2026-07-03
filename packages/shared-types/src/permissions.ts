@@ -29,6 +29,7 @@ export type Permission =
   | 'settings:manage'
   | 'audit:view'
   | 'billing:view'
+  | 'billing:manage'
   | 'client:portal';
 
 const ALL_PERMISSIONS: Permission[] = [
@@ -60,6 +61,7 @@ const ALL_PERMISSIONS: Permission[] = [
   'settings:manage',
   'audit:view',
   'billing:view',
+  'billing:manage',
   'client:portal',
 ];
 
@@ -90,6 +92,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'settings:manage',
     'audit:view',
     'billing:view',
+    'billing:manage',
   ],
   [UserRole.OFFICE_MANAGER]: [
     'users:view',
@@ -110,6 +113,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'calendar:view',
     'calendar:manage',
     'settings:view',
+    'billing:view',
+    'billing:manage',
   ],
   [UserRole.OFFICE_STAFF]: [
     'jobs:view',
@@ -133,6 +138,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'agreements:view',
     'reports:view',
     'billing:view',
+    'billing:manage',
     'crm:view',
   ],
   [UserRole.CLIENT]: ['client:portal', 'agreements:view', 'reports:view'],

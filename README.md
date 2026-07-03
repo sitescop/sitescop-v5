@@ -2,37 +2,32 @@
 
 Production-grade building, pest, and combined inspection management platform.
 
-## Phase 0 — Foundation (Complete)
+## Run from GitHub (any PC)
 
-- Turborepo monorepo
-- React + TypeScript + Vite frontend
-- Fastify + Prisma + PostgreSQL API
-- Authentication (login, logout, forgot/reset password)
-- Role-based access control (7 roles)
-- Design system and AppShell
-- Role-aware dashboards
+```bash
+git clone https://github.com/sitescop/sitescop-v5.git
+cd sitescop-v5
+npm install
+npm approve-scripts @embedded-postgres/windows-x64 embedded-postgres
+copy .env.example .env
+npm run dev
+```
+
+On Mac/Linux, use `cp .env.example .env` instead of `copy`.
+
+- **Web app:** http://localhost:5173  
+- **Login:** http://localhost:5173/login  
+- **API:** http://localhost:3001  
+
+`npm run dev` starts embedded PostgreSQL (port 5433), runs migrations, seeds demo data, and launches the API + web app.
 
 ## Prerequisites
 
 - Node.js 20+
 - npm 10+
+- Git
 
-## Quick Start
-
-```bash
-npm install
-npm approve-scripts @embedded-postgres/windows-x64 embedded-postgres
-npm run dev
-```
-
-`npm run dev` starts embedded PostgreSQL (port 5433), runs migrations, seeds demo users, and launches the API + web app.
-
-- **Web app:** http://localhost:5173
-- **Login:** http://localhost:5173/login
-- **API:** http://localhost:3001
-- **Health check:** http://localhost:3001/api/v1/health
-
-For Docker-based PostgreSQL/Redis instead, use `docker compose up -d` and set `DATABASE_URL` to port 5432 in `.env`.
+Optional: Docker (for Mailpit local email testing)
 
 ## Seeded Users
 
@@ -40,13 +35,34 @@ Password for all seeded accounts: `SiteScop2026!`
 
 | Email | Role |
 |-------|------|
-| superadmin@sitescop.com.au | Super Admin |
 | admin@sitescop-demo.com.au | Company Admin |
 | manager@sitescop-demo.com.au | Office Manager |
 | staff@sitescop-demo.com.au | Office Staff |
 | inspector@sitescop-demo.com.au | Inspector |
 | accountant@sitescop-demo.com.au | Accountant |
 | client@sitescop-demo.com.au | Client Portal |
+
+## Main workflow (agreement-first)
+
+1. **Agreements → Send Agreement** — client name, email, mobile, price → send (copy signing link manually until SMTP is set)
+2. Client signs online (property address on signing page if not entered upfront)
+3. **Accounts** — invoice created after sign → **Mark as Paid** when payment received
+4. **Job** auto-created → assign inspector → inspector accepts → start inspection
+5. Admin reviews inspection → **Generate PDFs** → download and email client manually (auto-email coming later)
+
+## Email (Zoho — optional)
+
+Copy `.env.example` to `.env` and set Zoho SMTP for `info@sitescop.com.au`:
+
+```env
+SMTP_HOST=smtppro.zoho.com.au
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=info@sitescop.com.au
+SMTP_PASS=your-zoho-app-password
+```
+
+Restart the API after changing `.env`.
 
 ## Project Structure
 
@@ -56,9 +72,9 @@ sitescop-v5/
 │   ├── web/          React frontend
 │   └── api/          Fastify API
 ├── packages/
-│   ├── shared-types/ Shared TypeScript types & RBAC
-│   ├── room-engine-core/ Room engines (Phase 3)
-│   └── eslint-config/
+│   ├── shared-types/
+│   ├── room-engine-core/
+│   └── report-pdf/
 └── docker-compose.yml
 ```
 
@@ -66,13 +82,11 @@ sitescop-v5/
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start all apps in development |
+| `npm run dev` | Start DB + API + web (development) |
 | `npm run build` | Production build |
-| `npm run lint` | Lint all packages |
-| `npm run typecheck` | TypeScript check |
 | `npm run db:migrate` | Run Prisma migrations |
 | `npm run db:seed` | Seed demo data |
 
-## Next Phase
+## Repository
 
-Phase 1 — Core Platform: Jobs module, CRM, Settings, Admin user management.
+https://github.com/sitescop/sitescop-v5

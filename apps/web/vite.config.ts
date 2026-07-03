@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@sitescop/shared-types': path.resolve(__dirname, '../../packages/shared-types/src/index.ts'),
+      '@sitescop/room-engine-core': path.resolve(__dirname, '../../packages/room-engine-core/src/index.ts'),
     },
   },
   server: {

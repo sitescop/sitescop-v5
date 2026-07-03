@@ -19,12 +19,13 @@ import type {
 import {
   BUILDING_EXTENSION_SECTION_KEYS,
   PEST_INSPECTION_SECTION_KEYS,
-  SHARED_INSPECTION_SECTION_KEYS,
+  SHARED_INSPECTION_PATCH_KEYS,
   buildRoomsFromCounts,
   calculateInspectionProgress,
   createEmptyInspectionFormData,
   enrichInspectionFormData,
   jobTypeToFormKind,
+  mergeRoomDataForReport,
   normalizeInspectionFormData,
   patchSectionData,
   type InspectionFormDataV2,
@@ -39,6 +40,7 @@ import { AppError, ForbiddenError, NotFoundError } from '../../shared/http/error
 import { parsePagination } from '../../shared/http/validation.js';
 import { canInspectorAccessJob, mapContactSummary, mapProperty, mapUserSummary } from '../../shared/mappers/index.js';
 import { resolveCompanyScope } from '../../shared/scoping/company-scope.js';
+import { assertJobReadyForInspection } from '../../shared/billing/job-billing-readiness.js';
 
 const inspectionInclude = {
   job: {
@@ -67,7 +69,7 @@ const realmSchema = z.enum(['shared', 'building', 'pest']);
 function parseSectionUpdate(input: { realm: InspectionFormRealm; section: string; data: Record<string, unknown> }) {
   const allowed =
     input.realm === 'shared'
-      ? SHARED_INSPECTION_SECTION_KEYS
+      ? SHARED_INSPECTION_PATCH_KEYS
       : input.realm === 'building'
         ? BUILDING_EXTENSION_SECTION_KEYS
         : PEST_INSPECTION_SECTION_KEYS;
@@ -170,7 +172,7 @@ function mapRoom(row: InspectionWithRelations['rooms'][number]): InspectionRoomD
     roomType: row.roomType as InspectionRoomDetail['roomType'],
     roomIndex: row.roomIndex,
     label: row.label,
-    data: row.data as Record<string, unknown>,
+    data: mergeRoomDataForReport(row.roomType, row.roomIndex, row.data as Record<string, unknown>),
   };
 }
 
@@ -379,6 +381,8 @@ export async function createInspectionFromJob(
     throw new ForbiddenError('You are not assigned to this job');
   }
 
+  await assertJobReadyForInspection(jobId, companyId);
+
   const allowedStatuses: JobStatus[] = [JobStatus.ACCEPTED, JobStatus.IN_PROGRESS];
   if (!allowedStatuses.includes(job.status)) {
     throw new AppError('Job must be accepted or in progress to start an inspection', 'INVALID_STATE');
@@ -474,10 +478,13 @@ export async function updateInspection(
 
   let formData = loadFormData(existing);
   if (parsed.formData) {
-    formData = enrichInspectionFormData({
-      ...formData,
-      ...(parsed.formData as Partial<InspectionFormDataV2>),
-    });
+    const formKind = jobTypeToFormKind(existing.job.type);
+    formData = enrichInspectionFormData(
+      normalizeInspectionFormData(
+        { ...(existing.formData as object), ...(parsed.formData as Record<string, unknown>) },
+        formKind,
+      ),
+    );
   }
 
   const row = await prisma.inspection.update({
@@ -628,10 +635,16 @@ export async function updateInspectionRoom(
   const room = existing.rooms.find((r) => r.id === roomId);
   if (!room) throw new NotFoundError('Room not found');
 
+  const sanitizedData = mergeRoomDataForReport(
+    room.roomType,
+    room.roomIndex,
+    parsed.data as Record<string, unknown>,
+  );
+
   await prisma.inspectionRoom.update({
     where: { id: roomId },
     data: {
-      data: parsed.data as Prisma.InputJsonValue,
+      data: sanitizedData as Prisma.InputJsonValue,
       label: parsed.label,
     },
   });

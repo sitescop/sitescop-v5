@@ -3,9 +3,11 @@ import type {
   BuildingInspectionFormData,
   ExternalSection,
   InspectorDeclarationSection,
+  InspectorHazardAssessmentSection,
   JobInformationSection,
   KitchenSection,
   LaundrySection,
+  ElectricalGeneralSection,
   PropertyDescriptionSection,
   RoofExteriorSection,
   RoofSpaceSection,
@@ -25,19 +27,21 @@ import type {
   PrefillJobContext,
 } from './types.js';
 import type { PestInspectionSections } from './pest-types.js';
-import { createEmptyFormData, normalizeAccessibilityAreas } from './defaults.js';
+import { createEmptyFormData, normalizeAccessibilityAreas, mergeSectionRecord, applyRoomElectricalDefaults, defaultElectricalDisclaimersField, defaultKitchenDisclaimersField, defaultLaundryDisclaimersField, defaultIfEmptyWorkingStatus, defaultSwitchesStatus, applyLaundrySurfaceDefaults } from './defaults.js';
 import { createEmptyPestSections, applyPestSectionDefaults } from './pest-defaults.js';
+import { applyAccessibilityRiskAssessment } from './risk-assessment.js';
+import { applyInspectorHazardAssessment, createEmptyInspectorHazardAssessment } from './hazard-assessment.js';
 import {
   applyConclusionUpdates,
   generateAutoRecommendations,
-  generateRiskExplanation,
 } from './conclusion.js';
-import { applyPestSectionUpdates } from './pest-conclusion.js';
+import { applyPestConclusionUpdates, applyPestSectionUpdates, enrichPestConclusion } from './pest-conclusion.js';
 
 export const INSPECTION_FORM_VERSION = 2 as const;
 
 /** Shared by building, pest, and combined — Job Information through Roof Space (kitchen excluded). */
 export interface SharedInspectionSections {
+  inspectorHazardAssessment: InspectorHazardAssessmentSection;
   jobInformation: JobInformationSection;
   services: ServicesSection;
   propertyDescription: PropertyDescriptionSection;
@@ -61,11 +65,18 @@ export const SHARED_INSPECTION_SECTION_KEYS: SharedInspectionSectionKey[] = [
   'roofSpace',
 ];
 
+/** Shared sections that can be patched via API (includes hazard, rendered separately in UI/PDF). */
+export const SHARED_INSPECTION_PATCH_KEYS: SharedInspectionSectionKey[] = [
+  ...SHARED_INSPECTION_SECTION_KEYS,
+  'inspectorHazardAssessment',
+];
+
 export const SHARED_INSPECTION_SECTION_LABELS: Record<SharedInspectionSectionKey, string> = {
   jobInformation: 'Job Information',
   services: 'Services',
   propertyDescription: 'Property Description',
   accessibilityObstructions: 'Accessibility',
+  inspectorHazardAssessment: 'Inspector Hazard Assessment',
   siteConditions: 'Site Conditions',
   external: 'External',
   roofExterior: 'Roof Exterior',
@@ -76,6 +87,7 @@ export const SHARED_INSPECTION_SECTION_LABELS: Record<SharedInspectionSectionKey
 export interface BuildingExtensionSections {
   kitchen: KitchenSection;
   laundry: LaundrySection;
+  electricalGeneral: ElectricalGeneralSection;
   subfloor: SubfloorSection;
   fencing: FencingSection;
   outbuildings: OutbuildingsSection;
@@ -95,6 +107,7 @@ export type BuildingExtensionSectionKey = keyof BuildingExtensionSections;
 export const BUILDING_EXTENSION_SECTION_KEYS: BuildingExtensionSectionKey[] = [
   'kitchen',
   'laundry',
+  'electricalGeneral',
   'subfloor',
   'fencing',
   'outbuildings',
@@ -112,6 +125,7 @@ export const BUILDING_EXTENSION_SECTION_KEYS: BuildingExtensionSectionKey[] = [
 export const BUILDING_EXTENSION_SECTION_LABELS: Record<BuildingExtensionSectionKey, string> = {
   kitchen: 'Kitchen',
   laundry: 'Laundry',
+  electricalGeneral: 'General Electrical Disclaimer',
   subfloor: 'Subfloor',
   fencing: 'Fencing',
   outbuildings: 'Outbuildings',
@@ -152,7 +166,7 @@ function splitLegacyBuildingFormData(legacy: BuildingInspectionFormData): Inspec
 
   return {
     version: INSPECTION_FORM_VERSION,
-    shared: {
+    shared: withSharedDefaults({
       jobInformation,
       services,
       propertyDescription,
@@ -161,7 +175,7 @@ function splitLegacyBuildingFormData(legacy: BuildingInspectionFormData): Inspec
       external,
       roofExterior,
       roofSpace,
-    },
+    }),
     building: buildingRest as BuildingExtensionSections,
   };
 }
@@ -170,42 +184,137 @@ function extractSharedFromLegacy(legacy: BuildingInspectionFormData): SharedInsp
   return splitLegacyBuildingFormData(legacy).shared;
 }
 
+function isSectionObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function mergeSharedSection(
+  key: SharedInspectionSectionKey,
+  raw: Record<string, unknown>,
+  shared: Partial<SharedInspectionSections> | undefined,
+  template: SharedInspectionSections,
+) {
+  const partial: Record<string, unknown> = {};
+  if (isSectionObject(raw[key])) Object.assign(partial, raw[key]);
+  if (isSectionObject(shared?.[key])) Object.assign(partial, shared[key]);
+  return mergeSectionRecord(template[key] as unknown as Record<string, unknown>, partial);
+}
+
+/** Merge v2 shared sections with any legacy root-level section objects still on the JSON blob. */
+function coalesceSharedSections(
+  raw: Record<string, unknown>,
+  shared: Partial<SharedInspectionSections> | undefined,
+  template: SharedInspectionSections,
+): SharedInspectionSections {
+  const merged = Object.fromEntries(
+    SHARED_INSPECTION_SECTION_KEYS.map((key) => [key, mergeSharedSection(key, raw, shared, template)]),
+  );
+  return {
+    ...merged,
+    inspectorHazardAssessment: mergeSharedSection(
+      'inspectorHazardAssessment',
+      raw,
+      shared,
+      template,
+    ),
+  } as unknown as SharedInspectionSections;
+}
+
+/** Merge v2 building sections with any legacy root-level building section objects. */
+function coalesceBuildingSections(
+  raw: Record<string, unknown>,
+  building: Partial<BuildingExtensionSections> | undefined,
+  template: BuildingExtensionSections,
+): BuildingExtensionSections {
+  return Object.fromEntries(
+    BUILDING_EXTENSION_SECTION_KEYS.map((key) => {
+      const partial: Record<string, unknown> = {};
+      if (isSectionObject(raw[key])) Object.assign(partial, raw[key]);
+      if (isSectionObject(building?.[key])) Object.assign(partial, building[key]);
+      return [
+        key,
+        mergeSectionRecord(template[key] as unknown as Record<string, unknown>, partial),
+      ];
+    }),
+  ) as unknown as BuildingExtensionSections;
+}
+
+function finalizeNormalizedForm(
+  form: InspectionFormDataV2,
+  jobFormKind: InspectionJobFormKind,
+): InspectionFormDataV2 {
+  return mergeInspectionFormWithDefaults(form, jobFormKind);
+}
+
 export function normalizeInspectionFormData(
   raw: unknown,
   jobFormKind: InspectionJobFormKind = 'BUILDING',
 ): InspectionFormDataV2 {
+  const template = createEmptyInspectionFormData(jobFormKind);
+
   if (raw && typeof raw === 'object' && (raw as InspectionFormDataV2).version === INSPECTION_FORM_VERSION) {
-    const v2 = raw as InspectionFormDataV2;
-    return {
-      version: INSPECTION_FORM_VERSION,
-      shared: v2.shared,
-      building: v2.building,
-      pest: v2.pest ? applyPestSectionDefaults(v2.pest) : undefined,
-    };
+    const v2 = raw as InspectionFormDataV2 & Record<string, unknown>;
+    const shared = coalesceSharedSections(v2, v2.shared, template.shared);
+
+    const building =
+      jobFormKind !== 'PEST' && template.building
+        ? coalesceBuildingSections(v2, v2.building, template.building)
+        : undefined;
+
+    const pest =
+      jobFormKind === 'PEST' || jobFormKind === 'COMBINED'
+        ? v2.pest
+          ? applyPestSectionDefaults(v2.pest)
+          : template.pest
+        : undefined;
+
+    return finalizeNormalizedForm(
+      {
+        version: INSPECTION_FORM_VERSION,
+        shared,
+        building,
+        pest,
+      },
+      jobFormKind,
+    );
   }
 
   const legacy = raw as BuildingInspectionFormData;
   if (legacy?.jobInformation) {
     const migrated = splitLegacyBuildingFormData(legacy);
     if (jobFormKind === 'PEST') {
-      return {
-        version: INSPECTION_FORM_VERSION,
-        shared: migrated.shared,
-        pest: createEmptyPestSections(),
-      };
+      return finalizeNormalizedForm(
+        {
+          version: INSPECTION_FORM_VERSION,
+          shared: migrated.shared,
+          pest: createEmptyPestSections(),
+        },
+        jobFormKind,
+      );
     }
     if (jobFormKind === 'COMBINED') {
-      return {
-        version: INSPECTION_FORM_VERSION,
-        shared: migrated.shared,
-        building: migrated.building,
-        pest: createEmptyPestSections(),
-      };
+      return finalizeNormalizedForm(
+        {
+          version: INSPECTION_FORM_VERSION,
+          shared: migrated.shared,
+          building: migrated.building,
+          pest: createEmptyPestSections(),
+        },
+        jobFormKind,
+      );
     }
-    return migrated;
+    return finalizeNormalizedForm(migrated, jobFormKind);
   }
 
-  return createEmptyInspectionFormData(jobFormKind);
+  return template;
+}
+
+function withSharedDefaults(shared: Omit<SharedInspectionSections, 'inspectorHazardAssessment'> & Partial<Pick<SharedInspectionSections, 'inspectorHazardAssessment'>>): SharedInspectionSections {
+  return {
+    ...shared,
+    inspectorHazardAssessment:
+      shared.inspectorHazardAssessment ?? createEmptyInspectorHazardAssessment(),
+  };
 }
 
 export function createEmptyInspectionFormData(
@@ -214,11 +323,12 @@ export function createEmptyInspectionFormData(
 ): InspectionFormDataV2 {
   const legacy = createEmptyFormData(prefill);
   const { shared, building } = splitLegacyBuildingFormData(legacy);
+  const sharedWithHazard = withSharedDefaults(shared);
 
   if (jobFormKind === 'PEST') {
     return {
       version: INSPECTION_FORM_VERSION,
-      shared,
+      shared: sharedWithHazard,
       pest: createEmptyPestSections(prefill),
     };
   }
@@ -226,7 +336,7 @@ export function createEmptyInspectionFormData(
   if (jobFormKind === 'COMBINED') {
     return {
       version: INSPECTION_FORM_VERSION,
-      shared,
+      shared: sharedWithHazard,
       building,
       pest: createEmptyPestSections(prefill),
     };
@@ -234,7 +344,7 @@ export function createEmptyInspectionFormData(
 
   return {
     version: INSPECTION_FORM_VERSION,
-    shared,
+    shared: sharedWithHazard,
     building,
   };
 }
@@ -258,7 +368,7 @@ export function flattenToLegacyBuildingFormData(form: InspectionFormDataV2): Bui
 /** Building auto-enrichment using flattened legacy shape for existing generators. */
 export function enrichBuildingExtension(building: BuildingExtensionSections, shared: SharedInspectionSections): BuildingExtensionSections {
   const flat = { ...shared, ...building } as BuildingInspectionFormData;
-  return {
+  const enriched = {
     ...building,
     conclusion: applyConclusionUpdates(building.conclusion),
     recommendations: {
@@ -266,23 +376,89 @@ export function enrichBuildingExtension(building: BuildingExtensionSections, sha
       autoRecommendations: generateAutoRecommendations(flat),
     },
   };
+  return applyBuildingElectricalDefaults(enriched);
 }
 
-export function enrichSharedSections(shared: SharedInspectionSections): SharedInspectionSections {
+function applyBuildingElectricalDefaults(building: BuildingExtensionSections): BuildingExtensionSections {
   return {
-    ...shared,
-    accessibilityObstructions: {
-      ...shared.accessibilityObstructions,
-      accessibilityAreas: normalizeAccessibilityAreas(shared.accessibilityObstructions.accessibilityAreas),
-      riskExplanation: generateRiskExplanation(shared.accessibilityObstructions.undetectedStructuralRisk),
+    ...building,
+    kitchen: {
+      ...building.kitchen,
+      lights: defaultIfEmptyWorkingStatus(building.kitchen.lights),
+      switches: defaultSwitchesStatus(),
+      powerPoints: defaultIfEmptyWorkingStatus(building.kitchen.powerPoints),
+      disclaimers: defaultKitchenDisclaimersField(),
+    },
+    laundry: applyLaundrySurfaceDefaults({
+      ...building.laundry,
+      lights: defaultIfEmptyWorkingStatus(building.laundry.lights),
+      switches: defaultSwitchesStatus(),
+      powerPoints: defaultIfEmptyWorkingStatus(building.laundry.powerPoints),
+      handle: building.laundry.handle || (building.laundry as { lockLatch?: string }).lockLatch || '',
+      disclaimers: defaultLaundryDisclaimersField(),
+    }),
+    electricalGeneral: {
+      ...building.electricalGeneral,
+      disclaimers: defaultElectricalDisclaimersField(),
     },
   };
 }
 
+export function enrichSharedSections(shared: SharedInspectionSections): SharedInspectionSections {
+  const accessibility = { ...shared.accessibilityObstructions };
+  const noteLines = [...(accessibility.inaccessibleCustomLines ?? ['', '', ''])];
+  while (noteLines.length < 3) noteLines.push('');
+
+  for (const custom of accessibility.inaccessibleAreas?.custom ?? []) {
+    const text = custom.trim();
+    if (!text) continue;
+    if (noteLines.some((line) => line.trim() === text)) continue;
+    const emptyIndex = noteLines.findIndex((line) => !line.trim());
+    if (emptyIndex >= 0) noteLines[emptyIndex] = text;
+  }
+
+  return {
+    ...shared,
+    accessibilityObstructions: applyAccessibilityRiskAssessment({
+      ...accessibility,
+      inaccessibleCustomLines: noteLines.slice(0, 3),
+      accessibilityAreas: normalizeAccessibilityAreas(accessibility.accessibilityAreas),
+    }),
+    inspectorHazardAssessment: applyInspectorHazardAssessment(
+      shared.inspectorHazardAssessment ?? createEmptyInspectorHazardAssessment(),
+    ),
+  };
+}
+
 export function enrichInspectionFormData(form: InspectionFormDataV2): InspectionFormDataV2 {
-  const shared = enrichSharedSections(form.shared);
+  const sharedBase = {
+    ...form.shared,
+    inspectorHazardAssessment:
+      form.shared?.inspectorHazardAssessment ??
+      createEmptyInspectorHazardAssessment(),
+  };
+  if (
+    form.building?.riskAssessment?.level?.trim() &&
+    sharedBase.inspectorHazardAssessment.overallLevel === 'Low'
+  ) {
+    const selectedHazards = [
+      ...(sharedBase.inspectorHazardAssessment.hazards?.selected ?? []),
+      ...(sharedBase.inspectorHazardAssessment.hazards?.custom ?? []),
+    ].filter(Boolean);
+    if (selectedHazards.length === 0) {
+      sharedBase.inspectorHazardAssessment = {
+        ...sharedBase.inspectorHazardAssessment,
+        overallLevel: form.building.riskAssessment.level,
+      };
+    }
+  }
+  const shared = enrichSharedSections(sharedBase);
   const building = form.building ? enrichBuildingExtension(form.building, shared) : undefined;
-  const pest = form.pest ? applyPestSectionUpdates(form.pest) : undefined;
+  let pest = form.pest ? applyPestSectionUpdates(form.pest, shared.accessibilityObstructions) : undefined;
+  if (pest) {
+    pest = applyPestConclusionUpdates(pest, building);
+    pest = enrichPestConclusion(pest, { building });
+  }
   return {
     version: INSPECTION_FORM_VERSION,
     shared,
@@ -392,6 +568,75 @@ export function patchSectionData(
 /** Property description lives under shared in v2 form. */
 export function getPropertyDescription(form: InspectionFormDataV2) {
   return form.shared.propertyDescription;
+}
+
+/** Deep-merge persisted form data with empty defaults so every form field appears in reports. */
+export function mergeInspectionFormWithDefaults(
+  form: InspectionFormDataV2,
+  jobFormKind: InspectionJobFormKind,
+): InspectionFormDataV2 {
+  const template = createEmptyInspectionFormData(jobFormKind);
+  const sharedEntries = [
+    ...SHARED_INSPECTION_SECTION_KEYS.map((key) => [
+      key,
+      mergeSectionRecord(
+        template.shared[key] as unknown as Record<string, unknown>,
+        form.shared?.[key] as unknown as Record<string, unknown> | undefined,
+      ),
+    ]),
+    [
+      'inspectorHazardAssessment',
+      mergeSectionRecord(
+        template.shared.inspectorHazardAssessment as unknown as Record<string, unknown>,
+        form.shared?.inspectorHazardAssessment as unknown as Record<string, unknown> | undefined,
+      ),
+    ],
+  ];
+  const shared = {
+    ...template.shared,
+    ...Object.fromEntries(sharedEntries),
+  } as SharedInspectionSections;
+
+  const needsBuilding = jobFormKind === 'BUILDING' || jobFormKind === 'COMBINED';
+  const building =
+    template.building && needsBuilding
+      ? ({
+          ...template.building,
+          ...Object.fromEntries(
+            BUILDING_EXTENSION_SECTION_KEYS.map((key) => [
+              key,
+              mergeSectionRecord(
+                template.building![key] as unknown as Record<string, unknown>,
+                form.building?.[key] as unknown as Record<string, unknown> | undefined,
+              ),
+            ]),
+          ),
+        } as BuildingExtensionSections)
+      : undefined;
+
+  const needsPest = jobFormKind === 'PEST' || jobFormKind === 'COMBINED';
+  const pest =
+    template.pest && needsPest
+      ? ({
+          ...template.pest,
+          ...Object.fromEntries(
+            (Object.keys(template.pest!) as (keyof PestInspectionSections)[]).map((key) => [
+              key,
+              mergeSectionRecord(
+                template.pest![key] as unknown as Record<string, unknown>,
+                form.pest?.[key] as unknown as Record<string, unknown> | undefined,
+              ),
+            ]),
+          ),
+        } as PestInspectionSections)
+      : undefined;
+
+  return {
+    version: INSPECTION_FORM_VERSION,
+    shared,
+    building,
+    pest,
+  };
 }
 
 export { extractSharedFromLegacy };

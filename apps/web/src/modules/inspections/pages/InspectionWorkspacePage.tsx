@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { InspectionStatus, JobType } from '@sitescop/shared-types';
+import { Download, FileText } from 'lucide-react';
+import { InspectionStatus, JobType, REPORT_TYPE_LABELS, ReportStatus } from '@sitescop/shared-types';
 import { jobTypeToFormKind } from '@sitescop/room-engine-core';
 import { inspectionsApi } from '@/lib/api/inspections';
+import { downloadReport, reportsApi } from '@/lib/api/reports';
 import { useAuthStore } from '@/modules/auth/store/auth-store';
 import {
   Button,
@@ -22,6 +24,7 @@ export function InspectionWorkspacePage() {
   const queryClient = useQueryClient();
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const canEdit = hasPermission('inspections:edit');
+  const canGenerateReports = hasPermission('reports:generate');
 
   const { data, isLoading } = useQuery({
     queryKey: ['inspection', id],
@@ -50,6 +53,20 @@ export function InspectionWorkspacePage() {
   const completeMutation = useMutation({
     mutationFn: () => inspectionsApi.complete(id!),
     onSuccess: invalidate,
+  });
+
+  const { data: reportsData, isLoading: reportsLoading } = useQuery({
+    queryKey: ['inspection-reports', id],
+    queryFn: () => reportsApi.listForInspection(id!),
+    enabled: Boolean(id) && isCompleted && hasPermission('reports:view'),
+  });
+
+  const generateReportsMutation = useMutation({
+    mutationFn: () => reportsApi.generate(id!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['inspection-reports', id] });
+      void queryClient.invalidateQueries({ queryKey: ['reports'] });
+    },
   });
 
   if (isLoading || !inspection || !formData) {
@@ -125,7 +142,70 @@ export function InspectionWorkspacePage() {
       {isCompleted && canEdit && (
         <div className="mb-4 rounded-sm border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-text">
           This report is marked complete. You can still edit any section below — changes save automatically.
-          {formKind === 'COMBINED' && ' Combined jobs will produce separate building and pest PDFs when reports are generated (Phase 5).'}
+          {formKind === 'COMBINED' && ' Combined jobs produce separate building and pest PDFs when you generate reports.'}
+        </div>
+      )}
+
+      {isCompleted && hasPermission('reports:view') && (
+        <div className="mb-4 rounded-sm border border-border bg-surface px-4 py-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-semibold text-text">Inspection PDFs</h3>
+              <p className="text-sm text-text-muted">
+                Generate AS 4349 compliant reports with Schedule 1 legal content.
+              </p>
+            </div>
+            {canGenerateReports && (
+              <Button
+                variant="accent"
+                onClick={() => generateReportsMutation.mutate()}
+                isLoading={generateReportsMutation.isPending}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                {reportsData?.reports?.length ? 'Regenerate PDFs' : 'Generate PDFs'}
+              </Button>
+            )}
+          </div>
+          {reportsLoading ? (
+            <p className="text-sm text-text-muted">Loading reports...</p>
+          ) : reportsData?.reports?.length ? (
+            <ul className="space-y-2">
+              {reportsData.reports.map((report) => (
+                <li
+                  key={report.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border px-3 py-2"
+                >
+                  <div>
+                    <p className="font-medium text-text">{REPORT_TYPE_LABELS[report.reportType]}</p>
+                    <p className="text-sm text-text-muted">
+                      {report.status === ReportStatus.READY && report.generatedAt
+                        ? `Ready · ${new Date(report.generatedAt).toLocaleString('en-AU')}`
+                        : report.status === ReportStatus.FAILED
+                          ? `Failed — ${report.errorMessage ?? 'Unknown error'}`
+                          : 'Generating...'}
+                    </p>
+                  </div>
+                  {report.status === ReportStatus.READY && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void downloadReport(report.id, report.fileName)}
+                    >
+                      <Download className="mr-1 h-4 w-4" />
+                      Download
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-text-muted">No PDFs generated yet.</p>
+          )}
+          <p className="mt-3 text-sm">
+            <Link to="/reports" className="text-primary hover:underline">
+              View all reports
+            </Link>
+          </p>
         </div>
       )}
 

@@ -131,6 +131,11 @@ export interface KitchenSection extends SectionBase {
   switches: string;
   powerPoints: string;
   moistureDamage: string;
+  disclaimers: CheckboxFieldState;
+}
+
+export interface ElectricalGeneralSection extends SectionBase {
+  disclaimers: CheckboxFieldState;
 }
 
 export interface LaundrySection extends SectionBase {
@@ -150,16 +155,15 @@ export interface LaundrySection extends SectionBase {
   floorType: string;
   floorCondition: string;
   window: string;
-  windowOperation: string;
   windowLock: string;
   door: string;
-  doorOperation: string;
-  lockLatch: string;
+  handle: string;
   lights: string;
   switches: string;
   powerPoints: string;
   exhaustFan: string;
   moistureLevel: string;
+  disclaimers: CheckboxFieldState;
 }
 
 export interface SubfloorSection extends SectionBase {
@@ -213,6 +217,16 @@ export interface MoistureTestingSection extends SectionBase {
   thermalImages: InspectionPhotoRef[];
 }
 
+export interface InspectorHazardAssessmentSection extends SectionBase {
+  hazards: CheckboxFieldState;
+  overallLevel: string;
+  inspectionOutcome: string;
+  clientAdvised: string;
+  rebookingRequired: string;
+  autoSummary: string;
+}
+
+/** @deprecated Use shared inspectorHazardAssessment. Kept for persisted building forms. */
 export interface RiskAssessmentSection extends SectionBase {
   level: string;
 }
@@ -252,6 +266,7 @@ export interface BuildingInspectionFormData {
   roofSpace: RoofSpaceSection;
   kitchen: KitchenSection;
   laundry: LaundrySection;
+  electricalGeneral: ElectricalGeneralSection;
   subfloor: SubfloorSection;
   fencing: FencingSection;
   outbuildings: OutbuildingsSection;
@@ -279,6 +294,7 @@ export const INSPECTION_SECTION_KEYS: InspectionSectionKey[] = [
   'roofSpace',
   'kitchen',
   'laundry',
+  'electricalGeneral',
   'subfloor',
   'fencing',
   'outbuildings',
@@ -304,6 +320,7 @@ export const INSPECTION_SECTION_LABELS: Record<InspectionSectionKey, string> = {
   roofSpace: 'Roof Space',
   kitchen: 'Kitchen',
   laundry: 'Laundry',
+  electricalGeneral: 'General Electrical Disclaimer',
   subfloor: 'Subfloor',
   fencing: 'Fencing',
   outbuildings: 'Outbuildings',
@@ -347,6 +364,7 @@ export interface BathroomRoomData extends SectionBase {
   floorTilesCondition: string;
   wallTilesBrokenCracked: string;
   wallTilesLoose: string;
+  wallTilesHollowSounding: string;
   wallTilesCondition: string;
   groutMissing: string;
   groutDeteriorated: string;

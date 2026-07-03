@@ -34,7 +34,7 @@ export function createEmptyPestSections(prefill?: PrefillJobContext): PestInspec
   return {
     undetectedTimberPestRisk: {
       ...base,
-      riskLevel: 'High',
+      riskLevel: 'Low',
       riskExplanation: '',
     },
     d1ActiveTermites: {
@@ -122,8 +122,11 @@ export function createEmptyPestSections(prefill?: PrefillJobContext): PestInspec
       recommendationsInSectionD: PEST_CONCLUSION_RECOMMENDATIONS[0],
       futureInspectionFrequency: '6 Month',
       futureInspectionOther: '',
+      autoConclusion: '',
+      autoRecommendations: [],
       inspectorName: prefill?.inspectorName ?? '',
       licenceNumber: prefill?.inspectorLicence ?? '',
+      signatureData: '',
       declarationDate: new Date().toISOString().slice(0, 10),
       reportComplete: false,
     },

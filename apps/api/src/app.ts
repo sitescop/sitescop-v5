@@ -12,6 +12,9 @@ import { registerSettingsRoutes } from './modules/settings/settings.routes.js';
 import { registerAdminRoutes } from './modules/admin/admin.routes.js';
 import { registerAgreementsRoutes } from './modules/agreements/agreements.routes.js';
 import { registerInspectionsRoutes } from './modules/inspections/inspections.routes.js';
+import { registerReportsRoutes } from './modules/reports/reports.routes.js';
+import { registerNotificationsRoutes } from './modules/notifications/notifications.routes.js';
+import { registerInvoicesRoutes } from './modules/invoices/invoices.routes.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -45,7 +48,7 @@ export async function buildApp() {
   app.get('/api/v1/health', async () => ({
     status: 'ok',
     version: '5.0.0',
-    phase: '3',
+    phase: '6',
   }));
 
   await registerAuthRoutes(app);
@@ -56,6 +59,9 @@ export async function buildApp() {
   await registerAdminRoutes(app);
   await registerAgreementsRoutes(app);
   await registerInspectionsRoutes(app);
+  await registerReportsRoutes(app);
+  await registerNotificationsRoutes(app);
+  await registerInvoicesRoutes(app);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof Error && 'statusCode' in error && typeof error.statusCode === 'number') {

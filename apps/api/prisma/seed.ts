@@ -7,10 +7,25 @@ import {
   ContactType,
   ContactStatus,
   AgreementStatus,
+  InvoiceStatus,
+  PaymentMethod,
   InspectionStatus,
   InspectionRoomType,
 } from '@prisma/client';
-import { buildRoomsFromCounts, createEmptyFormData } from '@sitescop/room-engine-core';
+import {
+  buildRoomsFromCounts,
+  createEmptyInspectionFormData,
+  enrichInspectionFormData,
+} from '@sitescop/room-engine-core';
+import {
+  SITESCOP_COMPANY_ABN,
+  SITESCOP_COMPANY_EMAIL,
+  SITESCOP_COMPANY_NAME,
+  SITESCOP_COMPANY_PHONE,
+  SITESCOP_COMPANY_WEBSITE,
+  SITESCOP_LOGO_PATH,
+  SITESCOP_PDF_FOOTER_TEXT,
+} from '@sitescop/shared-types';
 import { hashPassword, hashToken } from '../src/shared/auth/crypto.js';
 
 const prisma = new PrismaClient();
@@ -82,32 +97,48 @@ async function main() {
   const company = await prisma.company.upsert({
     where: { slug: 'sitescop-demo' },
     update: {
-      name: 'SiteScop Demo Inspections',
-      email: 'info@sitescop-demo.com.au',
-      phone: '1300 000 000',
-      address: '123 Inspection Way, Sydney NSW 2000',
+      name: SITESCOP_COMPANY_NAME,
+      abn: SITESCOP_COMPANY_ABN,
+      logoUrl: SITESCOP_LOGO_PATH,
+      email: SITESCOP_COMPANY_EMAIL,
+      phone: SITESCOP_COMPANY_PHONE,
+      website: SITESCOP_COMPANY_WEBSITE,
+      address: null,
     },
     create: {
-      name: 'SiteScop Demo Inspections',
+      name: SITESCOP_COMPANY_NAME,
       slug: 'sitescop-demo',
-      abn: '12 345 678 901',
-      email: 'info@sitescop-demo.com.au',
-      phone: '1300 000 000',
-      address: '123 Inspection Way, Sydney NSW 2000',
+      abn: SITESCOP_COMPANY_ABN,
+      logoUrl: SITESCOP_LOGO_PATH,
+      email: SITESCOP_COMPANY_EMAIL,
+      phone: SITESCOP_COMPANY_PHONE,
+      website: SITESCOP_COMPANY_WEBSITE,
+      address: null,
     },
   });
 
   await prisma.companySettings.upsert({
     where: { companyId: company.id },
-    update: {},
+    update: {
+      emailFromName: SITESCOP_COMPANY_NAME,
+      emailFromAddress: SITESCOP_COMPANY_EMAIL,
+      pdfFooterText: SITESCOP_PDF_FOOTER_TEXT,
+      pdfIncludeLogo: true,
+    },
     create: {
       companyId: company.id,
-      emailFromName: 'SiteScop Demo Inspections',
-      emailFromAddress: 'info@sitescop-demo.com.au',
+      emailFromName: SITESCOP_COMPANY_NAME,
+      emailFromAddress: SITESCOP_COMPANY_EMAIL,
+      pdfFooterText: SITESCOP_PDF_FOOTER_TEXT,
+      pdfIncludeLogo: true,
       defaultBuildingPrice: 45000,
       defaultPestPrice: 35000,
       defaultCombinedPrice: 65000,
       emailTemplates: {
+        agreementSent: 'Dear {{clientName}}, please sign your agreement: {{signingUrl}}',
+        agreementSigned: 'Agreement {{agreementNumber}} signed by {{clientName}}.',
+        invoiceSent: 'Invoice {{invoiceNumber}} for {{totalAmount}} — due {{dueDate}}.',
+        paymentReceived: 'Payment received for {{invoiceNumber}}. Job {{jobNumber}} is ready.',
         jobAssigned: 'Hi {{inspectorName}}, you have been assigned job {{jobNumber}}.',
         jobCompleted: 'Job {{jobNumber}} has been completed.',
       },
@@ -256,13 +287,19 @@ async function main() {
 
   await prisma.agreement.upsert({
     where: { id: 'seed-agreement-1' },
-    update: {},
+    update: {
+      status: AgreementStatus.SIGNED,
+      signedAt: new Date(),
+      signatureName: 'Sarah Mitchell',
+      signatureData: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iNjAiPjx0ZXh0IHg9IjEwIiB5PSI0MCIgZm9udC1zaXplPSIzMCI+Uy4gTWl0Y2hlbGw8L3RleHQ+PC9zdmc+',
+      declarationsAccepted: true,
+    },
     create: {
       id: 'seed-agreement-1',
       companyId: company.id,
       agreementNumber: `AGR-${year}-0001`,
       jobId: 'seed-job-1',
-      status: AgreementStatus.DRAFT,
+      status: AgreementStatus.SIGNED,
       type: JobType.PRE_PURCHASE,
       clientContactId: clientContact.id,
       clientName: 'Sarah Mitchell',
@@ -273,6 +310,40 @@ async function main() {
       gstCents: 4500,
       totalCents: 49500,
       legalSections,
+      signedAt: new Date(),
+      signatureName: 'Sarah Mitchell',
+      signatureData: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iNjAiPjx0ZXh0IHg9IjEwIiB5PSI0MCIgZm9udC1zaXplPSIzMCI+Uy4gTWl0Y2hlbGw8L3RleHQ+PC9zdmc+',
+      declarationsAccepted: true,
+      createdById: adminId,
+    },
+  });
+
+  await prisma.invoice.upsert({
+    where: { id: 'seed-invoice-1' },
+    update: {
+      status: InvoiceStatus.PAID,
+      paidAt: new Date(),
+      paymentMethod: PaymentMethod.BANK_TRANSFER,
+      paymentReference: 'SEED-PAY-001',
+    },
+    create: {
+      id: 'seed-invoice-1',
+      companyId: company.id,
+      invoiceNumber: `INV-${year}-0001`,
+      status: InvoiceStatus.PAID,
+      jobId: 'seed-job-1',
+      agreementId: 'seed-agreement-1',
+      clientContactId: clientContact.id,
+      clientName: 'Sarah Mitchell',
+      clientEmail: 'sarah.mitchell@example.com',
+      propertyAddress: '45 Ocean Street, Bondi NSW 2026',
+      description: 'Pre-Purchase Building Inspection',
+      subtotalCents: 45000,
+      gstCents: 4500,
+      totalCents: 49500,
+      paidAt: new Date(),
+      paymentMethod: PaymentMethod.BANK_TRANSFER,
+      paymentReference: 'SEED-PAY-001',
       createdById: adminId,
     },
   });
@@ -310,24 +381,26 @@ async function main() {
     },
   });
 
-  const seedFormData = createEmptyFormData({
-    jobNumber: `JOB-${year}-0001`,
-    clientName: 'Sarah Mitchell',
-    clientEmail: 'sarah.mitchell@example.com',
-    clientPhone: '0412 345 678',
-    agentName: 'James Agent',
-    agentPhone: '0400 111 222',
-    agentEmail: 'james.agent@example.com',
-    propertyAddress: '45 Ocean Street, Bondi NSW 2026',
-    scheduledDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    scheduledTime: '10:00',
-    inspectorName: 'Demo Inspector',
-    inspectorLicence: 'NSW-123456',
-  });
-  seedFormData.propertyDescription.bedroomCount = 3;
-  seedFormData.propertyDescription.bathroomCount = 2;
-  seedFormData.propertyDescription.livingAreaCount = 2;
-  seedFormData.propertyDescription.garageCount = 1;
+  const seedFormData = enrichInspectionFormData(
+    createEmptyInspectionFormData('BUILDING', {
+      jobNumber: `JOB-${year}-0001`,
+      clientName: 'Sarah Mitchell',
+      clientEmail: 'sarah.mitchell@example.com',
+      clientPhone: '0412 345 678',
+      agentName: 'James Agent',
+      agentPhone: '0400 111 222',
+      agentEmail: 'james.agent@example.com',
+      propertyAddress: '45 Ocean Street, Bondi NSW 2026',
+      scheduledDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+      scheduledTime: '10:00',
+      inspectorName: 'Demo Inspector',
+      inspectorLicence: 'NSW-123456',
+    }),
+  );
+  seedFormData.shared.propertyDescription.bedroomCount = 3;
+  seedFormData.shared.propertyDescription.bathroomCount = 2;
+  seedFormData.shared.propertyDescription.livingAreaCount = 2;
+  seedFormData.shared.propertyDescription.garageCount = 1;
 
   const seedRooms = buildRoomsFromCounts({
     bedrooms: 3,
@@ -379,7 +452,7 @@ async function main() {
 
   console.log('Seed complete.');
   console.log(`Default password for all seeded users: ${DEFAULT_PASSWORD}`);
-  console.log('Demo company: SiteScop Demo Inspections (sitescop-demo)');
+  console.log(`Company: ${SITESCOP_COMPANY_NAME} (sitescop-demo)`);
   console.log(`Demo signing URL (agreement 2): http://localhost:5173/sign/${demoSigningToken}`);
 }
 

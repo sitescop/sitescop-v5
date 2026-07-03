@@ -109,6 +109,7 @@ export interface JobDetail extends JobSummary {
   cancelledAt: string | null;
   createdBy: UserSummary;
   assignments: JobAssignmentSummary[];
+  billing?: import('./invoices.js').JobBillingStatus;
 }
 
 export interface JobsListResponse {
@@ -122,9 +123,9 @@ export interface CreateJobRequest {
   title: string;
   description?: string;
   type: JobType;
-  clientContactId?: string;
+  clientContactId: string;
   agentContactId?: string;
-  property?: {
+  property: {
     addressLine1: string;
     addressLine2?: string;
     suburb: string;
@@ -133,7 +134,7 @@ export interface CreateJobRequest {
   };
   scheduledDate?: string;
   scheduledTime?: string;
-  priceCents?: number;
+  priceCents: number;
   notes?: string;
 }
 

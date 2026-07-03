@@ -29,6 +29,19 @@ import {
 } from '../../shared/mappers/index.js';
 import { resolveCompanyScope } from '../../shared/scoping/company-scope.js';
 import { prisma } from '../../shared/database/prisma.js';
+import {
+  assertJobReadyForInspection,
+  getJobBillingStatus,
+} from '../../shared/billing/job-billing-readiness.js';
+import { NotificationType, AgreementStatus } from '@prisma/client';
+import { createNotification } from '../notifications/notifications.service.js';
+import { loadCompanyEmailContext, sendCompanyEmail } from '../../shared/email/email.service.js';
+import { formatPropertyAddress } from '../../shared/mappers/index.js';
+import {
+  createAgreementFromJob,
+  sendAgreement,
+} from '../agreements/agreements.service.js';
+import type { SendJobAgreementResponse } from '@sitescop/shared-types';
 
 const propertySchema = z.object({
   addressLine1: z.string().min(1, 'Address is required'),
@@ -43,12 +56,12 @@ export const createJobSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   description: z.string().max(5000).optional(),
   type: z.nativeEnum(JobType),
-  clientContactId: z.string().optional(),
+  clientContactId: z.string().min(1, 'Client is required'),
   agentContactId: z.string().optional(),
-  property: propertySchema.optional(),
+  property: propertySchema,
   scheduledDate: z.string().datetime().optional(),
   scheduledTime: z.string().max(20).optional(),
-  priceCents: z.number().int().min(0).optional(),
+  priceCents: z.number().int().min(1, 'Price is required'),
   notes: z.string().max(5000).optional(),
 });
 
@@ -76,6 +89,11 @@ const jobInclude = {
 
 type JobWithRelations = Prisma.JobGetPayload<{ include: typeof jobInclude }>;
 
+async function buildJobDetailResponse(job: JobWithRelations): Promise<JobDetail> {
+  const billing = await getJobBillingStatus(job.id, job.companyId);
+  return mapJobDetail(job, billing);
+}
+
 function mapJobSummary(job: JobWithRelations): JobSummary {
   return {
     id: job.id,
@@ -97,7 +115,7 @@ function mapJobSummary(job: JobWithRelations): JobSummary {
   };
 }
 
-function mapJobDetail(job: JobWithRelations): JobDetail {
+function mapJobDetail(job: JobWithRelations, billing?: Awaited<ReturnType<typeof getJobBillingStatus>>): JobDetail {
   return {
     ...mapJobSummary(job),
     description: job.description,
@@ -114,6 +132,7 @@ function mapJobDetail(job: JobWithRelations): JobDetail {
       respondedAt: a.respondedAt?.toISOString() ?? null,
       createdAt: a.createdAt.toISOString(),
     })),
+    ...(billing ? { billing } : {}),
   };
 }
 
@@ -207,7 +226,7 @@ export async function getJob(user: AuthUser, id: string): Promise<JobDetail> {
   const companyId = resolveCompanyScope(user);
   const job = await getJobOrThrow(id, companyId);
   assertJobAccess(user, job);
-  return mapJobDetail(job);
+  return buildJobDetailResponse(job);
 }
 
 export async function createJob(
@@ -226,6 +245,12 @@ export async function createJob(
       where: { id: data.clientContactId, companyId, deletedAt: null },
     });
     if (!contact) throw new NotFoundError('Client contact not found');
+    if (!contact.email?.trim()) {
+      throw new AppError(
+        'Client must have an email address before a job can be created. Update the client in CRM first.',
+        'VALIDATION_ERROR',
+      );
+    }
   }
 
   if (data.agentContactId) {
@@ -253,7 +278,7 @@ export async function createJob(
         title: data.title,
         description: data.description,
         type: data.type,
-        status: JobStatus.PENDING_ASSIGNMENT,
+        status: JobStatus.DRAFT,
         propertyId,
         clientContactId: data.clientContactId,
         agentContactId: data.agentContactId,
@@ -277,7 +302,45 @@ export async function createJob(
     request,
   });
 
-  return mapJobDetail(job);
+  return buildJobDetailResponse(job);
+}
+
+export async function sendJobAgreement(
+  user: AuthUser,
+  jobId: string,
+  request?: import('fastify').FastifyRequest,
+): Promise<SendJobAgreementResponse> {
+  const companyId = resolveCompanyScope(user) ?? user.companyId;
+  if (!companyId) throw new ForbiddenError('Company required');
+
+  await getJobOrThrow(jobId, companyId);
+
+  const existing = await prisma.agreement.findFirst({
+    where: {
+      jobId,
+      companyId,
+      status: { notIn: [AgreementStatus.CANCELLED, AgreementStatus.DECLINED] },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, status: true },
+  });
+
+  if (existing?.status === AgreementStatus.SIGNED) {
+    throw new AppError('Agreement is already signed for this job.', 'INVALID_STATE');
+  }
+
+  const agreementId = existing
+    ? existing.id
+    : (await createAgreementFromJob(user, jobId, request)).id;
+
+  const result = await sendAgreement(user, agreementId, request);
+
+  return {
+    agreementId: result.agreement.id,
+    agreementNumber: result.agreement.agreementNumber,
+    emailSent: result.emailSent,
+    ...(result.devSigningUrl ? { signingUrl: result.devSigningUrl } : {}),
+  };
 }
 
 function requireCompanyForCreate(user: AuthUser): string {
@@ -341,7 +404,7 @@ export async function updateJob(
     request,
   });
 
-  return mapJobDetail(job);
+  return buildJobDetailResponse(job);
 }
 
 export async function assignJob(
@@ -353,6 +416,10 @@ export async function assignJob(
   const { inspectorId } = assignJobSchema.parse(input);
   const companyId = resolveCompanyScope(user);
   const job = await getJobOrThrow(id, companyId);
+
+  if (job.status === JobStatus.PENDING_ASSIGNMENT || job.status === JobStatus.DRAFT) {
+    await assertJobReadyForInspection(job.id, job.companyId);
+  }
 
   const inspector = await prisma.user.findFirst({
     where: {
@@ -370,8 +437,7 @@ export async function assignJob(
         jobId: job.id,
         inspectorId,
         assignedById: user.id,
-        status: AssignmentStatus.ACCEPTED,
-        respondedAt: new Date(),
+        status: AssignmentStatus.PENDING,
       },
     });
 
@@ -379,7 +445,7 @@ export async function assignJob(
       where: { id },
       data: {
         assignedInspectorId: inspectorId,
-        status: JobStatus.ACCEPTED,
+        status: JobStatus.ASSIGNED,
       },
       include: jobInclude,
     });
@@ -395,7 +461,42 @@ export async function assignJob(
     request,
   });
 
-  return mapJobDetail(updated);
+  const settings = await prisma.companySettings.findUnique({ where: { companyId: job.companyId } });
+  await createNotification({
+    companyId: job.companyId,
+    userId: inspectorId,
+    type: NotificationType.JOB_ASSIGNED,
+    title: `Job assigned — ${updated.jobNumber}`,
+    body: `${updated.title} has been assigned to you.`,
+    entityType: 'Job',
+    entityId: updated.id,
+  });
+
+  if (settings?.notifyJobAssigned !== false) {
+    try {
+      const emailContext = await loadCompanyEmailContext(job.companyId);
+      await sendCompanyEmail({
+        context: emailContext,
+        toEmail: inspector.email,
+        templateKey: 'jobAssigned',
+        variables: {
+          inspectorName: `${inspector.firstName} ${inspector.lastName}`.trim(),
+          jobNumber: updated.jobNumber,
+          jobTitle: updated.title,
+          propertyAddress: updated.property ? formatPropertyAddress(updated.property) : '',
+          scheduledDate: updated.scheduledDate
+            ? `${updated.scheduledDate.toLocaleDateString('en-AU')}${updated.scheduledTime ? ` at ${updated.scheduledTime}` : ''}`
+            : 'To be confirmed',
+          companyName: emailContext.fromName,
+          companyPhone: '',
+        },
+      });
+    } catch {
+      // Email delivery failure should not block assignment.
+    }
+  }
+
+  return buildJobDetailResponse(updated);
 }
 
 export async function acceptJob(
@@ -439,7 +540,7 @@ export async function acceptJob(
     request,
   });
 
-  return mapJobDetail(updated);
+  return buildJobDetailResponse(updated);
 }
 
 export async function declineJob(
@@ -490,7 +591,7 @@ export async function declineJob(
     request,
   });
 
-  return mapJobDetail(updated);
+  return buildJobDetailResponse(updated);
 }
 
 async function transitionJob(
@@ -520,7 +621,7 @@ async function transitionJob(
     request,
   });
 
-  return mapJobDetail(updated);
+  return buildJobDetailResponse(updated);
 }
 
 export async function startJob(user: AuthUser, id: string, request?: import('fastify').FastifyRequest) {
@@ -612,7 +713,7 @@ export async function unarchiveJob(user: AuthUser, id: string, request?: import(
     request,
   });
 
-  return mapJobDetail(updated);
+  return buildJobDetailResponse(updated);
 }
 
 export async function softDeleteJob(user: AuthUser, id: string, request?: import('fastify').FastifyRequest) {
@@ -634,7 +735,7 @@ export async function softDeleteJob(user: AuthUser, id: string, request?: import
     request,
   });
 
-  return mapJobDetail(updated);
+  return buildJobDetailResponse(updated);
 }
 
 export async function restoreJob(user: AuthUser, id: string, request?: import('fastify').FastifyRequest) {
@@ -656,7 +757,7 @@ export async function restoreJob(user: AuthUser, id: string, request?: import('f
     request,
   });
 
-  return mapJobDetail(updated);
+  return buildJobDetailResponse(updated);
 }
 
 export async function permanentDeleteJob(

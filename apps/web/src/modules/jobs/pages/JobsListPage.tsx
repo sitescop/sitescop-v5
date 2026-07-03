@@ -8,14 +8,32 @@ import {
   Button,
   DataTable,
   Input,
-  JobStatusBadge,
   LoadingOverlay,
   PageHeader,
   Tabs,
   TabsList,
   TabsTrigger,
 } from '@/design-system/components';
-import type { JobSummary } from '@sitescop/shared-types';
+import { JOB_TYPE_LABELS, JobStatus, type JobSummary } from '@sitescop/shared-types';
+
+function workflowHint(status: JobStatus): string {
+  switch (status) {
+    case JobStatus.DRAFT:
+      return 'Send agreement';
+    case JobStatus.PENDING_ASSIGNMENT:
+      return 'Payment / assign';
+    case JobStatus.ASSIGNED:
+      return 'Inspector accept';
+    case JobStatus.ACCEPTED:
+      return 'Start inspection';
+    case JobStatus.IN_PROGRESS:
+      return 'Inspection';
+    case JobStatus.COMPLETED:
+      return 'Complete';
+    default:
+      return '—';
+  }
+}
 
 const VIEWS = [
   { id: 'active', label: 'Active', view: '' },
@@ -58,15 +76,23 @@ export function JobsListPage() {
         render: (row: JobSummary) => row.title,
       },
       {
-        key: 'status',
-        header: 'Status',
-        render: (row: JobSummary) => <JobStatusBadge status={row.status} />,
-      },
-      {
         key: 'client',
         header: 'Client',
         hideOnMobile: true,
         render: (row: JobSummary) => row.clientContact?.displayName ?? '—',
+      },
+      {
+        key: 'type',
+        header: 'Type of Inspection',
+        render: (row: JobSummary) => JOB_TYPE_LABELS[row.type],
+      },
+      {
+        key: 'workflow',
+        header: 'Next step',
+        hideOnMobile: true,
+        render: (row: JobSummary) => (
+          <span className="text-sm text-text-muted">{workflowHint(row.status)}</span>
+        ),
       },
       {
         key: 'inspector',

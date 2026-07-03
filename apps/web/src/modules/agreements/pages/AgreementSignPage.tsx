@@ -9,6 +9,8 @@ export function AgreementSignPage() {
   const { token } = useParams<{ token: string }>();
   const signatureRef = useRef<SignaturePadHandle>(null);
   const [signatureName, setSignatureName] = useState('');
+  const [propertyAddress, setPropertyAddress] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [agreementNumber, setAgreementNumber] = useState('');
@@ -24,12 +26,28 @@ export function AgreementSignPage() {
     if (token) void agreementsApi.markViewed(token);
   }, [token]);
 
+  useEffect(() => {
+    if (!data?.agreement) return;
+    const agreement = data.agreement;
+    setSignatureName(agreement.clientName);
+    if (agreement.propertyPending) {
+      setPropertyAddress('');
+    } else {
+      setPropertyAddress(agreement.propertyAddress);
+    }
+  }, [data]);
+
+  const agreement = data?.agreement;
+  const propertyPending = agreement?.propertyPending ?? false;
+
   const signMutation = useMutation({
     mutationFn: () =>
       agreementsApi.sign(token!, {
         signatureName,
         signatureData: signatureRef.current?.toDataUrl() ?? '',
         declarationsAccepted: true,
+        propertyAddress: propertyPending ? propertyAddress.trim() : undefined,
+        clientPhone: clientPhone.trim() || undefined,
       }),
     onSuccess: (result) => {
       setAgreementNumber(result.agreementNumber);
@@ -44,7 +62,7 @@ export function AgreementSignPage() {
   });
 
   if (isLoading) return <LoadingOverlay message="Loading agreement..." />;
-  if (loadError || !data) {
+  if (loadError || !agreement) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <Card className="max-w-md p-8 text-center">
@@ -53,8 +71,6 @@ export function AgreementSignPage() {
       </div>
     );
   }
-
-  const agreement = data.agreement;
 
   if (submitted) {
     return (
@@ -92,7 +108,7 @@ export function AgreementSignPage() {
             </div>
             <div>
               <h3 className="text-sm font-medium text-text-light">Property</h3>
-              <p>{agreement.propertyAddress}</p>
+              <p>{agreement.propertyPending ? 'You will enter this below before signing' : agreement.propertyAddress}</p>
             </div>
             <div>
               <h3 className="text-sm font-medium text-text-light">Total (inc. GST)</h3>
@@ -114,6 +130,24 @@ export function AgreementSignPage() {
           <Card className="space-y-4 p-6">
             <h2 className="text-lg font-semibold text-text">Sign Agreement</h2>
             {error && <p className="text-sm text-danger">{error}</p>}
+            {agreement.propertyPending && (
+              <>
+                <Input
+                  label="Property address to be inspected"
+                  value={propertyAddress}
+                  onChange={(e) => setPropertyAddress(e.target.value)}
+                  required
+                  placeholder="Full street address, suburb, state, postcode"
+                />
+                <Input
+                  label="Mobile phone"
+                  type="tel"
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  placeholder="04xx xxx xxx"
+                />
+              </>
+            )}
             <Input
               label="Full Name (as signature)"
               value={signatureName}
@@ -136,6 +170,10 @@ export function AgreementSignPage() {
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={() => {
+                  if (agreement.propertyPending && !propertyAddress.trim()) {
+                    setError('Please enter the property address to be inspected.');
+                    return;
+                  }
                   if (!signatureName || signatureRef.current?.isEmpty()) {
                     setError('Please enter your name and draw your signature.');
                     return;

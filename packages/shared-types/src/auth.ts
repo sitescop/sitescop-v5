@@ -29,6 +29,10 @@ export interface CompanySummary {
   id: string;
   name: string;
   slug: string;
+  abn?: string | null;
+  logoUrl?: string | null;
+  phone?: string | null;
+  website?: string | null;
 }
 
 export interface AuthUser {

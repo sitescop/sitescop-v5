@@ -14,6 +14,10 @@ export function mapUserToAuthUser(user: UserWithCompany): AuthUser {
         id: user.company.id,
         name: user.company.name,
         slug: user.company.slug,
+        abn: user.company.abn,
+        logoUrl: user.company.logoUrl,
+        phone: user.company.phone,
+        website: user.company.website,
       }
     : null;
 

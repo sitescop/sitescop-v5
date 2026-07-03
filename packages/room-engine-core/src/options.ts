@@ -12,7 +12,7 @@ export const AC_TYPES = ['Split System', 'Ducted', 'Evaporative', 'Multi Split',
 export const YES_NO_NA = ['Yes', 'No', 'N/A'] as const;
 export const YES_NO = ['Yes', 'No'] as const;
 
-export const PROPERTY_TYPES = ['Detached House', 'Duplex', 'Unit', 'Townhouse', 'Villa'] as const;
+export const PROPERTY_TYPES = ['Detached House', 'Duplex', 'Unit', 'Townhouse', 'Villa', 'Other'] as const;
 export const POSITION_ON_BLOCK = ['Front', 'Middle', 'Rear'] as const;
 export const ORIENTATIONS = [
   'North',
@@ -41,8 +41,8 @@ export const FLOOR_MATERIALS = ['Concrete Slab', 'Timber Floor', 'Suspended Timb
 export const FENCING_MATERIALS = ['Timber', 'Colorbond', 'Steel Sheet', 'Masonry', 'Chain Wire'] as const;
 
 export const ACCESSIBILITY_AREAS = [
-  'Interior Obstructions',
-  'Exterior Obstructions',
+  'Interior',
+  'Exterior',
   'Roof Space',
   'Subfloor',
   'Site',
@@ -120,6 +120,15 @@ export const INACCESSIBLE_AREA_PRESETS = [
   'Not applicable',
 ] as const;
 
+export const HAZARD_ASSESSMENT_LEVELS = ['Low', 'Moderate', 'High'] as const;
+
+export const INSPECTOR_HAZARD_PRESETS = [
+  'Aggressive dog',
+  'Dangerous or unrestrained animal',
+  'Aggressive or hostile client',
+  'Other',
+] as const;
+
 export const RISK_LEVELS = [
   'Low',
   'Low To Moderate',
@@ -190,6 +199,41 @@ export const BATHROOM_FIXTURES = [
   'Bidet',
   'Spa Bath',
 ] as const;
+
+export const BATHROOM_SURFACE_CONDITION = ['Good', 'Fair', 'Poor', 'Damaged'] as const;
+
+export const BATHROOM_FLOOR_TILE_STATUS = [
+  'Good',
+  'Fair',
+  'Poor',
+  'Damaged',
+  'Broken/Cracked',
+  'Loose',
+  'Hollow Sounding',
+] as const;
+
+export const BATHROOM_WALL_TILE_STATUS = [
+  'Good',
+  'Fair',
+  'Poor',
+  'Damaged',
+  'Broken/Cracked',
+  'Loose',
+  'Hollow Sounding',
+] as const;
+
+export const BATHROOM_GROUT_CONDITION = ['Good', 'Fair', 'Missing', 'Deteriorated'] as const;
+
+export const BATHROOM_WATER_POOLING_CAUSES = [
+  'Inadequate Fall to Floor Waste',
+  'Back Fall to Floor Waste',
+  'Uneven Tiles',
+  'Water Retained in Shower Niche',
+] as const;
+
+export const BATHROOM_DOOR_STATUS = ['Good', 'Fair', 'Poor', 'Moisture Damage', 'Not Operating'] as const;
+
+export const BATHROOM_JAMB_STATUS = ['Good', 'Fair', 'Poor', 'Moisture Damage'] as const;
 
 export const BEDROOM_TYPES = ['Bedroom', 'Master Bedroom', 'Guest Bedroom', 'Study', 'Nursery'] as const;
 
@@ -312,6 +356,69 @@ export const RECOMMENDATION_PRESETS = [
 ] as const;
 
 export const FLOOR_TYPES = ['Carpet', 'Timber', 'Tiles', 'Vinyl'] as const;
+
+export const LAUNDRY_FLOOR_TYPES = ['Tiles', 'Vinyl', 'Concrete', 'Timber', 'Other'] as const;
+
+export const FLOOR_CONDITION = ['Good', 'Fair', 'Poor', 'Damaged', 'Stained'] as const;
+
+export const SPLASHBACK_CONDITION = ['Good', 'Fair', 'Poor', 'Cracked', 'Loose', 'Missing', 'Not Present'] as const;
+
+/** Fixture / joinery condition including not-present and undetermined states. */
+export const FIXTURE_CONDITION = [
+  'N/A',
+  'Good',
+  'Fair',
+  'Poor',
+  'Damaged',
+  'Broken',
+  'Not Present',
+  'Undetermined',
+] as const;
+
+export const ELECTRICAL_POINT_STATUS = [
+  'Working',
+  'Not Working',
+  'Damaged',
+  'Undetermined',
+  'Should be inspected by a licensed electrician',
+] as const;
+
+/** Default when lights or power points are not individually assessed. */
+export const ELECTRICAL_WORKING = 'Working' as const;
+
+/** Default for switches and smoke alarms — not tested during building inspection. */
+export const LICENSED_ELECTRICIAN_INSPECTION = 'Should be inspected by a licensed electrician' as const;
+
+export const LIGHTS_SWITCHES_STATUS = [
+  'Working',
+  'Not Working',
+  'Undetermined',
+  'Should be inspected by a licensed electrician',
+] as const;
+
+export const SMOKE_ALARM_STATUS = [
+  'Present',
+  'Not Present',
+  'Unable to Test',
+  'Undetermined',
+  'Should be inspected by a licensed electrician',
+] as const;
+
+export const KITCHEN_DISCLAIMERS = [
+  'Kitchen appliances should be inspected by a licensed electrician.',
+  'Testing or assessing electrical appliances is not included as part of this building inspection.',
+] as const;
+
+export const LAUNDRY_DISCLAIMERS = [
+  'Laundry appliances should be inspected by a licensed electrician.',
+  'Testing or assessing electrical appliances is not included as part of this building inspection.',
+] as const;
+
+export const GENERAL_ELECTRICAL_DISCLAIMERS = [
+  'Any power points, electrical switches, electrical wiring, or electrical equipment are not tested during this inspection.',
+  'A licensed electrician should inspect all electrical installations and appliances if required.',
+] as const;
+
 export const WALL_DEFECTS = [
   'Cracking',
   'Moisture Damage',

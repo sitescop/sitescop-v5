@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InspectionFormDataV2, InspectionFormRealm } from '@sitescop/room-engine-core';
-import { getSectionData, patchSectionData } from '@sitescop/room-engine-core';
+import { enrichInspectionFormData, getSectionData, jobTypeToFormKind, normalizeInspectionFormData, patchSectionData } from '@sitescop/room-engine-core';
 import type { InspectionDetail, InspectionRoomDetail } from '@sitescop/shared-types';
 import { inspectionsApi } from '@/lib/api/inspections';
 
@@ -10,6 +10,7 @@ const SAVE_DEBOUNCE_MS = 700;
 
 const AUTO_SYNC_KEYS = new Set([
   'shared:accessibilityObstructions',
+  'shared:inspectorHazardAssessment',
   'building:conclusion',
   'building:recommendations',
 ]);
@@ -33,12 +34,14 @@ export function useInspectionEditor(
 
   useEffect(() => {
     if (!inspection) return;
-    setFormData(inspection.formData);
-    formDataRef.current = inspection.formData;
+    const formKind = jobTypeToFormKind(inspection.jobType);
+    const enriched = enrichInspectionFormData(normalizeInspectionFormData(inspection.formData, formKind));
+    setFormData(enriched);
+    formDataRef.current = enriched;
     setRooms(inspection.rooms);
     roomsRef.current = inspection.rooms;
     setSaveState('idle');
-  }, [inspection?.id, inspection?.updatedAt]);
+  }, [inspection?.id, inspection?.updatedAt, inspection?.jobType]);
 
   useEffect(() => {
     return () => {
@@ -58,7 +61,8 @@ export function useInspectionEditor(
 
       setFormData((prev) => {
         if (!prev) return prev;
-        const next = patchSectionData(prev, realm, section, partial);
+        const patched = patchSectionData(prev, realm, section, partial);
+        const next = enrichInspectionFormData(patched);
         formDataRef.current = next;
         return next;
       });
@@ -115,6 +119,9 @@ export function useInspectionEditor(
                   }
                 }
                 if (realm === 'pest' && server.pest) {
+                  next.pest = server.pest;
+                }
+                if (realm === 'shared' && section === 'accessibilityObstructions' && server.pest && prev.pest) {
                   next.pest = server.pest;
                 }
                 formDataRef.current = next;

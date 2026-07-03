@@ -47,6 +47,9 @@ export function ContactFormPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
+      if (type === ContactType.CLIENT && !email.trim()) {
+        throw new Error('Client email is required to send agreements and invoices.');
+      }
       const payload = {
         type,
         firstName,
@@ -99,13 +102,26 @@ export function ContactFormPage() {
             error={fieldError('type')}
           />
 
+          {type === ContactType.CLIENT && (
+            <p className="rounded-sm border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-text">
+              Client email is required — agreements and invoices are sent to this address.
+            </p>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={fieldError('firstName')} required />
             <Input label="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} error={fieldError('lastName')} required />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fieldError('email')} />
+            <Input
+              label={type === ContactType.CLIENT ? 'Email' : 'Email (optional)'}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              error={fieldError('email')}
+              required={type === ContactType.CLIENT}
+            />
             <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
 

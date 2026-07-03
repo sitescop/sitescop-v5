@@ -8,16 +8,25 @@ import {
   DAMAGE_OBSERVED,
   DRAINAGE_RATING,
   ELECTRICITY_OPTIONS,
+  ELECTRICAL_POINT_STATUS,
   EXTERIOR_OBSTRUCTIONS,
   EXTERNAL_DEFECTS,
   FENCING_MATERIALS,
+  FIXTURE_CONDITION,
   FLOOR_MATERIALS,
+  FLOOR_CONDITION,
   FRAME_MATERIALS,
   GAS_OPTIONS,
+  GENERAL_ELECTRICAL_DISCLAIMERS,
   HOT_WATER_TYPES,
   INACCESSIBLE_AREA_PRESETS,
   INTERIOR_OBSTRUCTIONS,
+  KITCHEN_DISCLAIMERS,
   LAND_SLOPE,
+  LAUNDRY_DISCLAIMERS,
+  LAUNDRY_FLOOR_TYPES,
+  LICENSED_ELECTRICIAN_INSPECTION,
+  LIGHTS_SWITCHES_STATUS,
   MINOR_DEFECT_PRESETS,
   MOISTURE_SOURCES,
   ORIENTATIONS,
@@ -34,6 +43,7 @@ import {
   ROOF_SPACE_OBSTRUCTIONS,
   SEWER_OPTIONS,
   SITE_DRAINAGE_CONCERNS,
+  SPLASHBACK_CONDITION,
   STOREYS,
   STRUCTURAL_MOVEMENT,
   SUBFLOOR_ELEMENTS,
@@ -53,6 +63,8 @@ import {
   SectionComments,
   YesNoSelect,
 } from './InspectionFields';
+import { InspectorHazardAssessmentFields } from './InspectorHazardAssessmentFields';
+import { InspectorSignatureField } from './InspectorSignatureField';
 
 function splitManualRecommendations(items: string[]): CheckboxFieldState {
   const presetSet = new Set<string>(RECOMMENDATION_PRESETS);
@@ -107,6 +119,12 @@ export function BuildingInspectionForm({
     <div className="space-y-6">
       {showShared && (
         <>
+      <InspectorHazardAssessmentFields
+        disabled={disabled}
+        section={formData.shared.inspectorHazardAssessment}
+        onChange={(partial) => patchShared('inspectorHazardAssessment', partial)}
+      />
+
       <section className="space-y-4">
         <h3 className="text-lg font-semibold text-text">Job Information</h3>
         <div className="grid gap-4 md:grid-cols-2">
@@ -186,10 +204,46 @@ export function BuildingInspectionForm({
       <section className="space-y-4">
         <h3 className="text-lg font-semibold text-text">Property Description</h3>
         <div className="grid gap-4 md:grid-cols-2">
-          <Select label="Property Type" value={p.propertyType} onChange={(e) => patchShared('propertyDescription', { propertyType: e.target.value })} options={PROPERTY_TYPES.map((v) => ({ value: v, label: v }))} />
-          <Select label="Position On Block" value={p.positionOnBlock} onChange={(e) => patchShared('propertyDescription', { positionOnBlock: e.target.value })} options={POSITION_ON_BLOCK.map((v) => ({ value: v, label: v }))} />
-          <Select label="Orientation" value={p.orientation} onChange={(e) => patchShared('propertyDescription', { orientation: e.target.value })} options={ORIENTATIONS.map((v) => ({ value: v, label: v }))} />
-          <Select label="Storeys" value={p.storeys} onChange={(e) => patchShared('propertyDescription', { storeys: e.target.value })} options={STOREYS.map((v) => ({ value: v, label: v }))} />
+          <Select
+            label="Property Type"
+            placeholder="Select property type"
+            value={p.propertyType}
+            onChange={(e) =>
+              patchShared('propertyDescription', {
+                propertyType: e.target.value,
+                ...(e.target.value !== 'Other' ? { propertyTypeOther: '' } : {}),
+              })
+            }
+            options={PROPERTY_TYPES.map((v) => ({ value: v, label: v }))}
+          />
+          {p.propertyType === 'Other' && (
+            <Input
+              label="Property Type (Other)"
+              value={p.propertyTypeOther}
+              onChange={(e) => patchShared('propertyDescription', { propertyTypeOther: e.target.value })}
+            />
+          )}
+          <Select
+            label="Position On Block"
+            placeholder="Select position"
+            value={p.positionOnBlock}
+            onChange={(e) => patchShared('propertyDescription', { positionOnBlock: e.target.value })}
+            options={POSITION_ON_BLOCK.map((v) => ({ value: v, label: v }))}
+          />
+          <Select
+            label="Orientation"
+            placeholder="Select orientation"
+            value={p.orientation}
+            onChange={(e) => patchShared('propertyDescription', { orientation: e.target.value })}
+            options={ORIENTATIONS.map((v) => ({ value: v, label: v }))}
+          />
+          <Select
+            label="Storeys"
+            placeholder="Select storeys"
+            value={p.storeys}
+            onChange={(e) => patchShared('propertyDescription', { storeys: e.target.value })}
+            options={STOREYS.map((v) => ({ value: v, label: v }))}
+          />
           <Input label="Building Age (Years)" type="number" min={0} value={p.buildingAgeYears} onChange={(e) => patchShared('propertyDescription', { buildingAgeYears: e.target.value })} />
           <Input label="Bedrooms" type="number" min={0} value={p.bedroomCount} onChange={(e) => patchShared('propertyDescription', { bedroomCount: Number(e.target.value) })} />
           <Input label="Bathrooms" type="number" min={0} value={p.bathroomCount} onChange={(e) => patchShared('propertyDescription', { bathroomCount: Number(e.target.value) })} />
@@ -204,15 +258,33 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Accessibility</h3>
+        <h3 className="text-lg font-semibold text-text">Accessibility & Risk Assessment</h3>
+        <p className="text-sm text-text-muted">
+          Record obstructions and inaccessible areas first. Undetected Structural Damage Risk defaults to Moderate and increases automatically when limitations are present — for example a dog, locked rooms, stored goods, or unsafe access.
+        </p>
         <CheckboxGroupField disabled={disabled} label="Accessibility Areas" options={ACCESSIBILITY_AREAS} value={a.accessibilityAreas} onChange={(v) => patchShared('accessibilityObstructions', { accessibilityAreas: v })} />
         <CheckboxGroupField disabled={disabled} label="A - Building Interior Obstructions" options={INTERIOR_OBSTRUCTIONS} value={a.interiorObstructions} onChange={(v) => patchShared('accessibilityObstructions', { interiorObstructions: v })} />
         <CheckboxGroupField disabled={disabled} label="B - Building Exterior Obstructions" options={EXTERIOR_OBSTRUCTIONS} value={a.exteriorObstructions} onChange={(v) => patchShared('accessibilityObstructions', { exteriorObstructions: v })} />
         <CheckboxGroupField disabled={disabled} label="C - Roof Space Obstructions" options={ROOF_SPACE_OBSTRUCTIONS} value={a.roofSpaceObstructions} onChange={(v) => patchShared('accessibilityObstructions', { roofSpaceObstructions: v })} />
         <CheckboxGroupField disabled={disabled} label="D - Subfloor Space Obstructions" options={SUBFLOOR_OBSTRUCTIONS} value={a.subfloorObstructions} onChange={(v) => patchShared('accessibilityObstructions', { subfloorObstructions: v })} />
         <CheckboxGroupField disabled={disabled} label="Inaccessible Areas" options={INACCESSIBLE_AREA_PRESETS} value={a.inaccessibleAreas} onChange={(v) => patchShared('accessibilityObstructions', { inaccessibleAreas: v })} />
+        <div className="grid gap-4 md:grid-cols-1">
+          {(a.inaccessibleCustomLines ?? ['', '', '']).slice(0, 3).map((line, index) => (
+            <Input
+              key={`inaccessible-note-${index}`}
+              label={index === 0 ? 'Inaccessible Area Notes' : `Inaccessible Area Note ${index + 1}`}
+              value={line}
+              onChange={(e) => {
+                const lines = [...(a.inaccessibleCustomLines ?? ['', '', ''])];
+                while (lines.length < 3) lines.push('');
+                lines[index] = e.target.value;
+                patchShared('accessibilityObstructions', { inaccessibleCustomLines: lines.slice(0, 3) });
+              }}
+            />
+          ))}
+        </div>
         <RatingSelect label="Undetected Structural Damage Risk" value={a.undetectedStructuralRisk} onChange={(v) => patchShared('accessibilityObstructions', { undetectedStructuralRisk: v })} options={RISK_LEVELS} />
-        <Textarea label="Risk Explanation (auto-generated, editable)" value={a.riskExplanation} onChange={(e) => patchShared('accessibilityObstructions', { riskExplanation: e.target.value })} rows={3} />
+        <Textarea label="Risk Explanation (auto-generated, editable)" value={a.riskExplanation} onChange={(e) => patchShared('accessibilityObstructions', { riskExplanation: e.target.value })} rows={5} />
         <SectionComments disabled={disabled} comments={a.comments} photos={a.photos} onCommentsChange={(v) => patchShared('accessibilityObstructions', { comments: v })} onPhotosChange={(v) => patchShared('accessibilityObstructions', { photos: v })} />
       </section>
 
@@ -269,6 +341,8 @@ export function BuildingInspectionForm({
             ['floorType', 'Floor Type', ['Tiles', 'Timber', 'Vinyl', 'Laminate', 'Other']],
             ['floorCondition', 'Floor Condition', ['Good', 'Fair', 'Poor', 'Damaged', 'Stained']],
             ['moistureDamage', 'Moisture Damage', ['None', 'Minor', 'Moderate', 'Major']],
+            ['lights', 'Lights Working', [...LIGHTS_SWITCHES_STATUS]],
+            ['powerPoints', 'Power Points Working', [...ELECTRICAL_POINT_STATUS]],
           ].map(([key, label, options]) => (
             <RatingSelect
               key={key as string}
@@ -279,11 +353,31 @@ export function BuildingInspectionForm({
             />
           ))}
         </div>
+        <div className="space-y-2 rounded-sm border border-border bg-background p-4 text-sm text-text-muted">
+          <InspectionSubsectionHeading className="mb-2 border-b-0 pb-0">Switches</InspectionSubsectionHeading>
+          <p>{LICENSED_ELECTRICIAN_INSPECTION}</p>
+        </div>
+        <InspectionSubsectionHeading as="h4">Door &amp; Window</InspectionSubsectionHeading>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {(['door', 'handle', 'window', 'windowLock'] as const).map((field) => (
+            <RatingSelect
+              key={field}
+              disabled={disabled}
+              label={field.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())}
+              value={building.kitchen[field]}
+              onChange={(v) => patchBuilding('kitchen', { [field]: v })}
+              options={[...FIXTURE_CONDITION]}
+            />
+          ))}
+        </div>
         <CheckboxGroupField disabled={disabled} label="Walls" options={WALL_DEFECTS} value={building.kitchen.walls} onChange={(v) => patchBuilding('kitchen', { walls: v })} />
         <CheckboxGroupField disabled={disabled} label="Ceiling" options={WALL_DEFECTS} value={building.kitchen.ceiling} onChange={(v) => patchBuilding('kitchen', { ceiling: v })} />
-        <p className="rounded-sm bg-background p-3 text-sm text-text-muted">
-          Kitchen appliances are not part of this inspection. Electrical and plumbing appliances should be assessed by appropriately licensed tradespersons.
-        </p>
+        <div className="space-y-2 rounded-sm border border-border bg-background p-4 text-sm text-text-muted">
+          <InspectionSubsectionHeading className="mb-2 border-b-0 pb-0">Kitchen Disclaimer</InspectionSubsectionHeading>
+          {KITCHEN_DISCLAIMERS.map((statement) => (
+            <p key={statement}>{statement}</p>
+          ))}
+        </div>
         <SectionComments disabled={disabled} comments={building.kitchen.comments} photos={building.kitchen.photos} onCommentsChange={(v) => patchBuilding('kitchen', { comments: v })} onPhotosChange={(v) => patchBuilding('kitchen', { photos: v })} />
       </section>
 
@@ -301,6 +395,9 @@ export function BuildingInspectionForm({
             ['waterPooling', 'Water Pooling', ['No', 'Yes']],
             ['floorWaste', 'Floor Waste', ['Not Blocked', 'Partially Blocked', 'Blocked']],
             ['moistureLevel', 'Moisture Damage Level', ['None', 'Minor', 'Moderate', 'Major']],
+            ['lights', 'Lights Working', [...LIGHTS_SWITCHES_STATUS]],
+            ['powerPoints', 'Power Points Working', [...ELECTRICAL_POINT_STATUS]],
+            ['exhaustFan', 'Exhaust Fan', ['Working', 'Not Working', 'Undetermined', 'Not Present']],
           ].map(([key, label, options]) => (
             <RatingSelect
               key={key as string}
@@ -311,10 +408,72 @@ export function BuildingInspectionForm({
             />
           ))}
         </div>
+        <InspectionSubsectionHeading as="h4">Splashback &amp; Floor</InspectionSubsectionHeading>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <RatingSelect
+            disabled={disabled}
+            label="Splashback"
+            value={building.laundry.splashback || 'Good'}
+            onChange={(v) => patchBuilding('laundry', { splashback: v })}
+            options={[...SPLASHBACK_CONDITION]}
+          />
+          <RatingSelect
+            disabled={disabled}
+            label="Floor Type"
+            value={building.laundry.floorType || 'Tiles'}
+            onChange={(v) => patchBuilding('laundry', { floorType: v })}
+            options={[...LAUNDRY_FLOOR_TYPES]}
+          />
+          <RatingSelect
+            disabled={disabled}
+            label="Floor Condition"
+            value={building.laundry.floorCondition || 'Good'}
+            onChange={(v) => patchBuilding('laundry', { floorCondition: v })}
+            options={[...FLOOR_CONDITION]}
+          />
+        </div>
+        <div className="space-y-2 rounded-sm border border-border bg-background p-4 text-sm text-text-muted">
+          <InspectionSubsectionHeading className="mb-2 border-b-0 pb-0">Switches</InspectionSubsectionHeading>
+          <p>{LICENSED_ELECTRICIAN_INSPECTION}</p>
+        </div>
+        <InspectionSubsectionHeading as="h4">Door &amp; Window</InspectionSubsectionHeading>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {(['door', 'handle', 'window', 'windowLock'] as const).map((field) => (
+            <RatingSelect
+              key={field}
+              disabled={disabled}
+              label={field.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())}
+              value={building.laundry[field]}
+              onChange={(v) => patchBuilding('laundry', { [field]: v })}
+              options={[...FIXTURE_CONDITION]}
+            />
+          ))}
+        </div>
         {building.laundry.waterPooling === 'Yes' && (
           <PhotoField disabled={disabled} label="Water Pooling Evidence" photos={building.laundry.waterPoolingPhotos} onChange={(v) => patchBuilding('laundry', { waterPoolingPhotos: v })} />
         )}
+        <CheckboxGroupField disabled={disabled} label="Walls" options={WALL_DEFECTS} value={building.laundry.walls} onChange={(v) => patchBuilding('laundry', { walls: v })} />
+        <CheckboxGroupField disabled={disabled} label="Ceiling" options={WALL_DEFECTS} value={building.laundry.ceiling} onChange={(v) => patchBuilding('laundry', { ceiling: v })} />
+        <div className="space-y-2 rounded-sm border border-border bg-background p-4 text-sm text-text-muted">
+          <InspectionSubsectionHeading className="mb-2 border-b-0 pb-0">Laundry Disclaimer</InspectionSubsectionHeading>
+          {LAUNDRY_DISCLAIMERS.map((statement) => (
+            <p key={statement}>{statement}</p>
+          ))}
+        </div>
         <SectionComments disabled={disabled} comments={building.laundry.comments} photos={building.laundry.photos} onCommentsChange={(v) => patchBuilding('laundry', { comments: v })} onPhotosChange={(v) => patchBuilding('laundry', { photos: v })} />
+      </section>
+
+      <section className="space-y-4">
+        <h3 className="text-lg font-semibold text-text">General Electrical Disclaimer</h3>
+        <div className="space-y-2 rounded-sm border border-border bg-background p-4 text-sm text-text-muted">
+          {GENERAL_ELECTRICAL_DISCLAIMERS.map((statement) => (
+            <p key={statement}>{statement}</p>
+          ))}
+        </div>
+        <p className="text-xs text-text-muted">
+          These standard disclaimer statements are included automatically on every building report.
+        </p>
+        <SectionComments disabled={disabled} comments={building.electricalGeneral.comments} photos={building.electricalGeneral.photos} onCommentsChange={(v) => patchBuilding('electricalGeneral', { comments: v })} onPhotosChange={(v) => patchBuilding('electricalGeneral', { photos: v })} />
       </section>
 
       {roomSections}
@@ -375,11 +534,6 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Risk Assessment</h3>
-        <RatingSelect label="Overall Risk Level" value={building.riskAssessment.level} onChange={(v) => patchBuilding('riskAssessment', { level: v })} options={RISK_LEVELS} />
-      </section>
-
-      <section className="space-y-4">
         <h3 className="text-lg font-semibold text-text">Conclusion</h3>
         <div className="grid gap-4 md:grid-cols-2">
           <RatingSelect label="Structural Damage Rating" value={building.conclusion.structuralDamageRating} onChange={(v) => patchBuilding('conclusion', { structuralDamageRating: v })} options={CONCLUSION_RATINGS} />
@@ -418,6 +572,19 @@ export function BuildingInspectionForm({
           <Input label="Licence Number" value={building.inspectorDeclaration.licenceNumber} onChange={(e) => patchBuilding('inspectorDeclaration', { licenceNumber: e.target.value })} />
           <Input label="Declaration Date" type="date" value={building.inspectorDeclaration.declarationDate} onChange={(e) => patchBuilding('inspectorDeclaration', { declarationDate: e.target.value })} />
         </div>
+        <InspectorSignatureField
+          disabled={disabled}
+          label="Inspector Signature"
+          value={building.inspectorDeclaration.signatureData}
+          onChange={(signatureData) => patchBuilding('inspectorDeclaration', { signatureData })}
+        />
+        <InspectorSignatureField
+          disabled={disabled}
+          label="Client Signature (optional)"
+          value={building.inspectorDeclaration.clientSignatureData}
+          onChange={(clientSignatureData) => patchBuilding('inspectorDeclaration', { clientSignatureData })}
+          useSavedDefault={false}
+        />
       </section>
         </>
       )}

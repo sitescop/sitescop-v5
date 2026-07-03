@@ -1,18 +1,23 @@
 import {
   AgreementStatus,
+  ContactType,
   JobType,
+  NotificationType,
   UserRole,
   type Prisma,
 } from '@prisma/client';
 import type { AuthUser } from '@sitescop/shared-types';
+import { formatAudCents } from '@sitescop/shared-types';
 import type {
   AgreementDetail,
   AgreementsListResponse,
   AgreementSummary,
   CreateAgreementRequest,
+  CreateAndSendAgreementResponse,
   DeclineAgreementRequest,
   PublicAgreementView,
   SendAgreementResponse,
+  SendNewAgreementRequest,
   SignAgreementRequest,
   UpdateAgreementRequest,
   AgreementLegalContent,
@@ -26,6 +31,12 @@ import { parsePagination } from '../../shared/http/validation.js';
 import { resolveCompanyScope } from '../../shared/scoping/company-scope.js';
 import { prisma } from '../../shared/database/prisma.js';
 import { getDefaultLegalSections, maskEmail, mergeLegalSections } from './legal/default-templates.js';
+import { loadCompanyEmailContext, sendCompanyEmail } from '../../shared/email/email.service.js';
+import { notifyBillingTeam, notifyOfficeStaff } from '../notifications/notifications.service.js';
+import { createDraftInvoiceForSignedAgreement, trySendInvoiceForAgreement } from '../invoices/invoices.service.js';
+import { findOrCreateClientContact } from '../../shared/crm/find-or-create-client.js';
+import { PENDING_PROPERTY_PLACEHOLDER } from '../../shared/billing/create-job-from-agreement.js';
+import { advanceJobAfterBillingComplete } from '../../shared/billing/job-billing-readiness.js';
 
 const AGREEMENT_TOKEN_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -48,6 +59,18 @@ export const signAgreementSchema = z.object({
   signatureName: z.string().min(1).max(200),
   signatureData: z.string().min(10),
   declarationsAccepted: z.literal(true),
+  propertyAddress: z.string().min(1).max(500).optional(),
+  clientPhone: z.string().max(30).optional(),
+});
+
+export const sendNewAgreementSchema = z.object({
+  type: z.nativeEnum(JobType),
+  clientName: z.string().min(1).max(200),
+  clientEmail: z.string().email(),
+  clientPhone: z.string().max(30).optional(),
+  propertyAddress: z.string().max(500).optional(),
+  priceCents: z.number().int().min(1),
+  notes: z.string().max(5000).optional(),
 });
 
 export const declineAgreementSchema = z.object({
@@ -257,6 +280,62 @@ export async function createAgreement(
   return mapDetail(row);
 }
 
+export async function createAndSendAgreement(
+  user: AuthUser,
+  input: SendNewAgreementRequest,
+  request?: import('fastify').FastifyRequest,
+): Promise<CreateAndSendAgreementResponse> {
+  const data = sendNewAgreementSchema.parse(input);
+  const companyId = resolveCompanyScope(user) ?? user.companyId;
+  if (!companyId) throw new ForbiddenError('Company required');
+
+  const email = data.clientEmail.toLowerCase().trim();
+  const existingContact = await prisma.contact.findFirst({
+    where: {
+      companyId,
+      type: ContactType.CLIENT,
+      deletedAt: null,
+      email: { equals: email, mode: 'insensitive' },
+    },
+    select: { id: true },
+  });
+
+  const clientContactId = await findOrCreateClientContact(
+    companyId,
+    {
+      clientName: data.clientName,
+      clientEmail: data.clientEmail,
+      clientPhone: data.clientPhone,
+    },
+    user.id,
+    request,
+  );
+
+  const propertyAddress = data.propertyAddress?.trim() || PENDING_PROPERTY_PLACEHOLDER;
+
+  const agreement = await createAgreement(
+    user,
+    {
+      type: data.type,
+      clientContactId,
+      clientName: data.clientName,
+      clientEmail: data.clientEmail,
+      clientPhone: data.clientPhone,
+      propertyAddress,
+      priceCents: data.priceCents,
+      notes: data.notes,
+    },
+    request,
+  );
+
+  const sendResult = await sendAgreement(user, agreement.id, request);
+
+  return {
+    ...sendResult,
+    contactCreated: !existingContact,
+  };
+}
+
 export async function createAgreementFromJob(
   user: AuthUser,
   jobId: string,
@@ -410,9 +489,41 @@ export async function sendAgreement(
     request,
   });
 
+  let emailSent = false;
+  try {
+    const emailContext = await loadCompanyEmailContext(row.companyId);
+    const company = await prisma.company.findUniqueOrThrow({ where: { id: row.companyId } });
+    await sendCompanyEmail({
+      context: emailContext,
+      toEmail: row.clientEmail,
+      templateKey: 'agreementSent',
+      variables: {
+        clientName: row.clientName,
+        companyName: company.name,
+        propertyAddress: row.propertyAddress,
+        agreementNumber: row.agreementNumber,
+        totalAmount: formatAudCents(row.totalCents),
+        signingUrl,
+        companyPhone: company.phone ?? '',
+      },
+    });
+    emailSent = true;
+  } catch {
+    emailSent = false;
+  }
+
+  await notifyOfficeStaff(row.companyId, {
+    type: NotificationType.AGREEMENT_SENT,
+    title: `Agreement sent — ${row.agreementNumber}`,
+    body: `Agreement emailed to ${row.clientName} at ${row.clientEmail}.`,
+    entityType: 'Agreement',
+    entityId: id,
+  });
+
   const response: SendAgreementResponse = {
     agreement: mapDetail(row),
     signingUrl,
+    emailSent,
   };
 
   if (!config.isProduction) {
@@ -499,6 +610,7 @@ export async function getPublicAgreement(token: string): Promise<PublicAgreement
     agreementDate: row.agreementDate.toISOString(),
     legalSections: row.legalSections as unknown as AgreementLegalContent,
     canSign,
+    propertyPending: row.propertyAddress === PENDING_PROPERTY_PLACEHOLDER,
   };
 }
 
@@ -540,6 +652,14 @@ export async function signPublicAgreement(
     throw new AppError('Agreement cannot be signed in its current status', 'INVALID_STATE');
   }
 
+  const propertyAddress =
+    data.propertyAddress?.trim() ||
+    (row.propertyAddress === PENDING_PROPERTY_PLACEHOLDER ? null : row.propertyAddress);
+
+  if (row.propertyAddress === PENDING_PROPERTY_PLACEHOLDER && !data.propertyAddress?.trim()) {
+    throw new AppError('Property address is required before signing', 'VALIDATION_ERROR');
+  }
+
   await prisma.agreement.update({
     where: { id: row.id },
     data: {
@@ -550,6 +670,8 @@ export async function signPublicAgreement(
       signedIp: request?.ip ?? null,
       declarationsAccepted: true,
       accessTokenHash: null,
+      ...(propertyAddress ? { propertyAddress } : {}),
+      ...(data.clientPhone?.trim() ? { clientPhone: data.clientPhone.trim() } : {}),
     },
   });
 
@@ -562,6 +684,46 @@ export async function signPublicAgreement(
     metadata: { signatureName: data.signatureName },
     request,
   });
+
+  await createDraftInvoiceForSignedAgreement(row.id, row.companyId, row.createdById);
+  await trySendInvoiceForAgreement(row.id, row.companyId, row.createdById);
+
+  const job = row.jobId
+    ? await prisma.job.findUnique({ where: { id: row.jobId }, select: { jobNumber: true } })
+    : null;
+
+  await notifyBillingTeam(row.companyId, {
+    type: NotificationType.AGREEMENT_SIGNED,
+    title: `Agreement signed — ${row.agreementNumber}`,
+    body: `${row.clientName} signed the agreement for ${row.propertyAddress}. Invoice draft created.`,
+    entityType: 'Agreement',
+    entityId: row.id,
+  });
+
+  try {
+    const emailContext = await loadCompanyEmailContext(row.companyId);
+    const company = await prisma.company.findUniqueOrThrow({ where: { id: row.companyId } });
+    await sendCompanyEmail({
+      context: emailContext,
+      toEmail: emailContext.fromAddress,
+      templateKey: 'agreementSigned',
+      variables: {
+        agreementNumber: row.agreementNumber,
+        clientName: row.clientName,
+        propertyAddress: row.propertyAddress,
+        jobNumber: job?.jobNumber ?? '—',
+        signedAt: new Date().toLocaleString('en-AU'),
+        companyName: company.name,
+        companyPhone: company.phone ?? '',
+      },
+    });
+  } catch {
+    // Office email is best-effort; in-app notification already recorded.
+  }
+
+  if (row.jobId) {
+    await advanceJobAfterBillingComplete(row.jobId, row.companyId);
+  }
 
   return { success: true, agreementNumber: row.agreementNumber };
 }
@@ -597,6 +759,14 @@ export async function declinePublicAgreement(
     entityId: row.id,
     metadata: { reason },
     request,
+  });
+
+  await notifyOfficeStaff(row.companyId, {
+    type: NotificationType.AGREEMENT_DECLINED,
+    title: `Agreement declined — ${row.agreementNumber}`,
+    body: `${row.clientName} declined the agreement${reason ? `: ${reason}` : '.'}`,
+    entityType: 'Agreement',
+    entityId: row.id,
   });
 
   return { success: true };
@@ -645,3 +815,4 @@ export async function updateAgreementTemplate(
 }
 
 export { getDefaultLegalSections };
+export { getAgreementPdfForUser } from './agreement-pdf.service.js';

@@ -14,6 +14,8 @@ import { AdminRoutes } from '@/modules/admin/AdminRoutes';
 import { AgreementsRoutes } from '@/modules/agreements/AgreementsRoutes';
 import { AgreementSignPage } from '@/modules/agreements/pages/AgreementSignPage';
 import { InspectionsRoutes } from '@/modules/inspections/InspectionsRoutes';
+import { ReportsRoutes } from '@/modules/reports/ReportsRoutes';
+import { AccountsRoutes } from '@/modules/accounts/AccountsRoutes';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,7 +95,7 @@ export function AppRouter() {
               path="reports/*"
               element={
                 <RequirePermission permission="reports:view">
-                  <ModulePlaceholder title="Reports" description="Inspection reports and PDFs" phase="Phase 5" />
+                  <ReportsRoutes />
                 </RequirePermission>
               }
             />
@@ -102,7 +104,7 @@ export function AppRouter() {
               path="accounts/*"
               element={
                 <RequirePermission permission="billing:view">
-                  <ModulePlaceholder title="Accounts" description="Billing and invoices" phase="Phase 6" />
+                  <AccountsRoutes />
                 </RequirePermission>
               }
             />

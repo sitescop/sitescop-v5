@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { INSPECTION_STATUS_LABELS } from '@sitescop/shared-types';
-import type { InspectionSummary } from '@sitescop/shared-types';
+import { INSPECTION_STATUS_LABELS, JOB_TYPE_LABELS, type InspectionSummary } from '@sitescop/shared-types';
 import { inspectionsApi } from '@/lib/api/inspections';
 import {
   Button,
@@ -58,6 +57,11 @@ export function InspectionsListPage() {
         header: 'Client',
         hideOnMobile: true,
         render: (row: InspectionSummary) => row.clientName ?? '—',
+      },
+      {
+        key: 'type',
+        header: 'Type',
+        render: (row: InspectionSummary) => JOB_TYPE_LABELS[row.jobType],
       },
       {
         key: 'status',

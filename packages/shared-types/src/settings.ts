@@ -5,6 +5,7 @@ export interface CompanyProfile {
   abn: string | null;
   email: string | null;
   phone: string | null;
+  website: string | null;
   address: string | null;
   logoUrl: string | null;
 }
@@ -46,6 +47,7 @@ export interface UpdateCompanyProfileRequest {
   abn?: string;
   email?: string;
   phone?: string;
+  website?: string;
   address?: string;
   logoUrl?: string;
 }

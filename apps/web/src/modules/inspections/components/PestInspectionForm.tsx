@@ -2,6 +2,7 @@ import type { InspectionFormRealm, PestInspectionSections } from '@sitescop/room
 import {
   ACTIVE_TERMITES_IMPORTANT_NOTE,
   BARRIER_BRIDGING_ITEMS,
+  CHEMICAL_DELIGNIFICATION_EVIDENCE,
   CONDUCIVE_INSPECTION_ANSWERS,
   CONDUCIVE_RECOMMENDATION_PRESETS,
   EVIDENCE_FOUND_OPTIONS,
@@ -9,11 +10,12 @@ import {
   FUNGAL_DECAY_LOCATIONS,
   FUTURE_INSPECTION_FREQUENCIES,
   MAJOR_HAZARD_ANSWERS,
+  MAJOR_SAFETY_HAZARD_ITEMS,
   MANAGEMENT_PROPOSAL_OPTIONS,
   MOISTURE_LOCATION_PRESETS,
   MOISTURE_STAIN_PRESETS,
   MOISTURE_STAINS_DISCLAIMER,
-  PEST_CONCLUSION_RECOMMENDATIONS,
+  PEST_INSPECTION_SECTION_LABELS,
   PREVIOUS_TREATMENT_EVIDENCE,
   SUBFLOOR_VENTILATION_ANSWERS,
   TERMITE_EVIDENCE_ANSWERS,
@@ -31,6 +33,7 @@ import {
   SectionComments,
   YesNoSelect,
 } from './InspectionFields';
+import { InspectorSignatureField } from './InspectorSignatureField';
 
 interface PestInspectionFormProps {
   pest: PestInspectionSections;
@@ -58,22 +61,25 @@ export function PestInspectionForm({ pest, onSectionChange, readOnly }: PestInsp
     <div className="space-y-8">
       <section className="space-y-4">
         <h3 className="text-lg font-semibold text-text">Section D — Significant Items</h3>
-        <InspectionSubsectionHeading as="h4">Undetected Timber Pest Risk Assessment</InspectionSubsectionHeading>
+        <InspectionSubsectionHeading as="h4">Risk Assessment</InspectionSubsectionHeading>
+        <p className="text-sm text-text-muted">
+          Risk level defaults to Low and updates from accessibility obstructions recorded above. The assessment text below is generated automatically and can be edited.
+        </p>
         <RatingSelect
-          label="Undetected Timber Pest Risk"
+          label="Undetected Timber Pest Risk Level"
           value={pest.undetectedTimberPestRisk.riskLevel}
           onChange={(v) => patch('undetectedTimberPestRisk', { riskLevel: v })}
           options={[...TIMBER_PEST_RISK_LEVELS]}
         />
         <Textarea
-          label="Risk Explanation (auto-generated, editable)"
+          label="Risk Assessment"
           value={pest.undetectedTimberPestRisk.riskExplanation}
           onChange={(e) => patch('undetectedTimberPestRisk', { riskExplanation: e.target.value })}
-          rows={3}
+          rows={10}
         />
       </section>
 
-      <section className="space-y-4 rounded-sm border border-border p-4">
+      <section className="space-y-4">
         <InspectionSubsectionHeading as="h4">D1 Active (Live) Termites</InspectionSubsectionHeading>
         <Select
           label="Was evidence of live termites found?"
@@ -162,7 +168,7 @@ export function PestInspectionForm({ pest, onSectionChange, readOnly }: PestInsp
       <section className="space-y-4 rounded-sm border border-border p-4">
         <InspectionSubsectionHeading as="h4">D6 Chemical Delignification</InspectionSubsectionHeading>
         <RatingSelect label="Summary" value={pest.d6ChemicalDelignification.summaryAnswer} onChange={(v) => patch('d6ChemicalDelignification', { summaryAnswer: v })} options={[...EVIDENCE_FOUND_OPTIONS]} />
-        <CheckboxGroupField disabled={disabled} label="Evidence items" options={['Evidence item']} value={pest.d6ChemicalDelignification.evidenceItems} onChange={(v) => patch('d6ChemicalDelignification', { evidenceItems: v })} allowCustom />
+        <CheckboxGroupField disabled={disabled} label="Evidence items" options={CHEMICAL_DELIGNIFICATION_EVIDENCE} value={pest.d6ChemicalDelignification.evidenceItems} onChange={(v) => patch('d6ChemicalDelignification', { evidenceItems: v })} />
         <PhotoField disabled={disabled} label="Photos" photos={pest.d6ChemicalDelignification.photos} onChange={(photos) => patch('d6ChemicalDelignification', { photos })} />
         <SectionComments disabled={disabled} comments={pest.d6ChemicalDelignification.comments} photos={[]} onCommentsChange={(v) => patch('d6ChemicalDelignification', { comments: v })} onPhotosChange={() => undefined} />
       </section>
@@ -215,7 +221,7 @@ export function PestInspectionForm({ pest, onSectionChange, readOnly }: PestInsp
       <section className="space-y-4 rounded-sm border border-border p-4">
         <InspectionSubsectionHeading as="h4">D11 Bridging of Termite Barriers and Inspection Zones</InspectionSubsectionHeading>
         <RatingSelect label="Summary" value={pest.d11BarrierBridging.summaryAnswer} onChange={(v) => patch('d11BarrierBridging', { summaryAnswer: v })} options={[...EVIDENCE_FOUND_OPTIONS]} />
-        <CheckboxGroupField disabled={disabled} label="Evidence items" options={BARRIER_BRIDGING_ITEMS} value={pest.d11BarrierBridging.evidenceItems} onChange={(v) => patch('d11BarrierBridging', { evidenceItems: v })} />
+        <CheckboxGroupField disabled={disabled} label="Evidence items" options={BARRIER_BRIDGING_ITEMS} value={pest.d11BarrierBridging.evidenceItems} onChange={(v) => patch('d11BarrierBridging', { evidenceItems: v })} allowCustom={false} />
         <PhotoField disabled={disabled} label="Photos" photos={pest.d11BarrierBridging.photos} onChange={(photos) => patch('d11BarrierBridging', { photos })} />
         <Textarea label="Comments" value={pest.d11BarrierBridging.comments} onChange={(e) => patch('d11BarrierBridging', { comments: e.target.value })} rows={3} />
       </section>
@@ -240,21 +246,42 @@ export function PestInspectionForm({ pest, onSectionChange, readOnly }: PestInsp
       <section className="space-y-4 rounded-sm border border-border p-4">
         <InspectionSubsectionHeading as="h4">D14 Major Safety Hazards</InspectionSubsectionHeading>
         <RatingSelect label="Summary" value={pest.d14MajorSafetyHazards.summaryAnswer} onChange={(v) => patch('d14MajorSafetyHazards', { summaryAnswer: v })} options={[...MAJOR_HAZARD_ANSWERS]} />
-        <CheckboxGroupField disabled={disabled} label="Hazards" options={['Hazard item']} value={pest.d14MajorSafetyHazards.hazardItems} onChange={(v) => patch('d14MajorSafetyHazards', { hazardItems: v })} allowCustom />
+        <CheckboxGroupField disabled={disabled} label="Hazards" options={MAJOR_SAFETY_HAZARD_ITEMS} value={pest.d14MajorSafetyHazards.hazardItems} onChange={(v) => patch('d14MajorSafetyHazards', { hazardItems: v })} />
         <PhotoField disabled={disabled} label="Photos" photos={pest.d14MajorSafetyHazards.photos} onChange={(photos) => patch('d14MajorSafetyHazards', { photos })} />
         <SectionComments disabled={disabled} comments={pest.d14MajorSafetyHazards.comments} photos={[]} onCommentsChange={(v) => patch('d14MajorSafetyHazards', { comments: v })} onPhotosChange={() => undefined} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Section E — Conclusion</h3>
-        <Select label="Recommendations" value={pest.pestConclusion.recommendationsInSectionD} onChange={(e) => patch('pestConclusion', { recommendationsInSectionD: e.target.value })} options={PEST_CONCLUSION_RECOMMENDATIONS.map((v) => ({ value: v, label: v }))} />
-        <Select label="Future Timber Pest Inspection" value={pest.pestConclusion.futureInspectionFrequency} onChange={(e) => patch('pestConclusion', { futureInspectionFrequency: e.target.value })} options={FUTURE_INSPECTION_FREQUENCIES.map((v) => ({ value: v, label: v }))} />
-        <Input label="Other inspection period" value={pest.pestConclusion.futureInspectionOther} onChange={(e) => patch('pestConclusion', { futureInspectionOther: e.target.value })} />
+        <h3 className="text-lg font-semibold text-text">{PEST_INSPECTION_SECTION_LABELS.pestConclusion}</h3>
+        <Textarea
+          label="Conclusion"
+          value={pest.pestConclusion.autoConclusion}
+          onChange={(e) => patch('pestConclusion', { autoConclusion: e.target.value })}
+          rows={8}
+        />
+        <div className="rounded-sm bg-background p-3 text-sm">
+          <p className="inspection-subsection-heading">Recommendations</p>
+          {pest.pestConclusion.autoRecommendations.length ? (
+            <ul className="list-disc pl-5">
+              {pest.pestConclusion.autoRecommendations.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-text-muted">Recommendations will be generated from Section D findings.</p>
+          )}
+        </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Input label="Inspector Name" value={pest.pestConclusion.inspectorName} onChange={(e) => patch('pestConclusion', { inspectorName: e.target.value })} />
           <Input label="Licence Number" value={pest.pestConclusion.licenceNumber} onChange={(e) => patch('pestConclusion', { licenceNumber: e.target.value })} />
           <Input label="Declaration Date" type="date" value={pest.pestConclusion.declarationDate} onChange={(e) => patch('pestConclusion', { declarationDate: e.target.value })} />
         </div>
+        <InspectorSignatureField
+          disabled={disabled}
+          label="Inspector Signature"
+          value={pest.pestConclusion.signatureData ?? ''}
+          onChange={(signatureData) => patch('pestConclusion', { signatureData })}
+        />
       </section>
     </div>
   );

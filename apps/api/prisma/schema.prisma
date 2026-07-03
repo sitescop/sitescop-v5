@@ -85,6 +85,52 @@ enum InspectionRoomType {
   GARAGE
 }
 
+enum ReportType {
+  BUILDING
+  PEST
+}
+
+enum ReportStatus {
+  GENERATING
+  READY
+  FAILED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD
+  CASH
+  CHEQUE
+  OTHER
+}
+
+enum NotificationType {
+  JOB_CREATED
+  JOB_ASSIGNED
+  JOB_COMPLETED
+  AGREEMENT_SENT
+  AGREEMENT_SIGNED
+  AGREEMENT_DECLINED
+  INVOICE_SENT
+  INVOICE_PAID
+  PAYMENT_RECEIVED
+  SYSTEM
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -92,6 +138,7 @@ model Company {
   abn       String?
   email     String?
   phone     String?
+  website   String?
   address   String?
   logoUrl   String?
   createdAt DateTime @default(now())
@@ -103,6 +150,10 @@ model Company {
   jobs        Job[]
   agreements  Agreement[]
   inspections Inspection[]
+  inspectionReports InspectionReport[]
+  invoices    Invoice[]
+  notifications Notification[]
+  emailMessages EmailMessage[]
   settings    CompanySettings?
   apiKeys     ApiKey[]
 
@@ -132,6 +183,9 @@ model User {
   createdAgreements Agreement[] @relation("AgreementCreator")
   inspections       Inspection[] @relation("InspectionInspector")
   createdInspections Inspection[] @relation("InspectionCreator")
+  generatedReports   InspectionReport[] @relation("ReportGenerator")
+  createdInvoices    Invoice[]          @relation("InvoiceCreator")
+  notifications      Notification[]
 
   @@index([companyId])
   @@index([role])
@@ -205,6 +259,7 @@ model Contact {
   clientJobs  Job[]         @relation("JobClient")
   agentJobs   Job[]         @relation("JobAgent")
   agreements  Agreement[]
+  invoices    Invoice[]
 
   @@index([companyId])
   @@index([type])
@@ -255,6 +310,7 @@ model Job {
   assignments          JobAssignment[]
   agreements           Agreement[]
   inspections          Inspection[]
+  invoices             Invoice[]
   completedAt          DateTime?
   cancelledAt          DateTime?
   archivedAt           DateTime?
@@ -374,6 +430,7 @@ model Agreement {
   declarationsAccepted  Boolean         @default(false)
   createdById           String
   createdBy             User            @relation("AgreementCreator", fields: [createdById], references: [id])
+  invoices              Invoice[]
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
 
@@ -383,6 +440,84 @@ model Agreement {
   @@index([jobId])
   @@index([clientEmail])
   @@map("agreements")
+}
+
+model Invoice {
+  id               String         @id @default(cuid())
+  companyId        String
+  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invoiceNumber    String
+  status           InvoiceStatus  @default(DRAFT)
+  jobId            String?
+  job              Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  agreementId      String?
+  agreement        Agreement?     @relation(fields: [agreementId], references: [id], onDelete: SetNull)
+  clientContactId  String?
+  clientContact    Contact?       @relation(fields: [clientContactId], references: [id], onDelete: SetNull)
+  clientName       String
+  clientEmail      String
+  propertyAddress  String?
+  description      String
+  subtotalCents    Int
+  gstCents         Int
+  totalCents       Int
+  issueDate        DateTime       @default(now())
+  dueDate          DateTime?
+  sentAt           DateTime?
+  paidAt           DateTime?
+  paymentMethod    PaymentMethod?
+  paymentReference String?
+  notes            String?
+  createdById      String
+  createdBy        User           @relation("InvoiceCreator", fields: [createdById], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([companyId, invoiceNumber])
+  @@index([companyId])
+  @@index([status])
+  @@index([jobId])
+  @@index([agreementId])
+  @@map("invoices")
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  companyId  String
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  body       String
+  entityType String?
+  entityId   String?
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([companyId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model EmailMessage {
+  id           String              @id @default(cuid())
+  companyId    String
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  toEmail      String
+  subject      String
+  templateKey  String?
+  status       EmailDeliveryStatus @default(PENDING)
+  errorMessage String?
+  sentAt       DateTime?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+
+  @@index([companyId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_messages")
 }
 
 model Inspection {
@@ -402,6 +537,7 @@ model Inspection {
   createdById      String
   createdBy        User             @relation("InspectionCreator", fields: [createdById], references: [id])
   rooms            InspectionRoom[]
+  reports          InspectionReport[]
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -411,6 +547,31 @@ model Inspection {
   @@index([status])
   @@index([inspectorId])
   @@map("inspections")
+}
+
+model InspectionReport {
+  id            String       @id @default(cuid())
+  companyId     String
+  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionId  String
+  inspection    Inspection   @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  reportType    ReportType
+  status        ReportStatus @default(GENERATING)
+  fileName      String
+  filePath      String?
+  fileSizeBytes Int?
+  errorMessage  String?
+  generatedById String
+  generatedBy   User         @relation("ReportGenerator", fields: [generatedById], references: [id])
+  generatedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([inspectionId, reportType])
+  @@index([companyId])
+  @@index([inspectionId])
+  @@index([status])
+  @@map("inspection_reports")
 }
 
 model InspectionRoom {

@@ -19,14 +19,28 @@ import {
   resolveCompanyScope,
 } from '../../shared/scoping/company-scope.js';
 import { prisma } from '../../shared/database/prisma.js';
+import { syncLegacyDemoBrandingIfNeeded } from '../../shared/branding/sync-legacy-demo-branding.js';
 
 const profileSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   abn: z.string().max(20).optional(),
   email: z.string().email().optional().or(z.literal('')),
   phone: z.string().max(30).optional(),
+  website: z.string().max(200).optional(),
   address: z.string().max(500).optional(),
-  logoUrl: z.string().url().optional().or(z.literal('')),
+  logoUrl: z
+    .string()
+    .max(2000)
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (value) =>
+        !value ||
+        value.startsWith('data:') ||
+        value.startsWith('/') ||
+        /^https?:\/\//i.test(value),
+      { message: 'Logo must be a URL, site path, or data URI' },
+    ),
 });
 
 const preferencesSchema = z.object({
@@ -74,6 +88,7 @@ function mapProfile(company: {
   abn: string | null;
   email: string | null;
   phone: string | null;
+  website: string | null;
   address: string | null;
   logoUrl: string | null;
 }): CompanyProfile {
@@ -84,6 +99,7 @@ function mapProfile(company: {
     abn: company.abn,
     email: company.email,
     phone: company.phone,
+    website: company.website,
     address: company.address,
     logoUrl: company.logoUrl,
   };
@@ -128,10 +144,10 @@ async function getOrCreateSettings(companyId: string): Promise<CompanySettings> 
 
 export async function getCompanySettings(user: AuthUser): Promise<CompanySettingsResponse> {
   const companyId = requireCompanyId(user);
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) throw new NotFoundError('Company not found');
+  const existing = await prisma.company.findUnique({ where: { id: companyId } });
+  if (!existing) throw new NotFoundError('Company not found');
 
-  const settings = await getOrCreateSettings(companyId);
+  const { company, settings } = await syncLegacyDemoBrandingIfNeeded(existing);
   return {
     company: mapProfile(company),
     preferences: mapPreferences(settings),
@@ -154,6 +170,7 @@ export async function updateCompanyProfile(
       abn: data.abn,
       email: data.email === '' ? null : data.email,
       phone: data.phone,
+      website: data.website === '' ? null : data.website,
       address: data.address,
       logoUrl: data.logoUrl === '' ? null : data.logoUrl,
     },

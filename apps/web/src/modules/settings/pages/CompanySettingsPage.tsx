@@ -1,3 +1,4 @@
+import { SITESCOP_LOGO_PATH } from '@sitescop/shared-types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@/lib/api/settings';
 import { useAuthStore } from '@/modules/auth/store/auth-store';
@@ -57,6 +58,7 @@ export function CompanySettingsPage() {
   const [abn, setAbn] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [website, setWebsite] = useState('');
   const [address, setAddress] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
 
@@ -66,6 +68,7 @@ export function CompanySettingsPage() {
     setAbn(data.company.abn ?? '');
     setEmail(data.company.email ?? '');
     setPhone(data.company.phone ?? '');
+    setWebsite(data.company.website ?? '');
     setAddress(data.company.address ?? '');
     setLogoUrl(data.company.logoUrl ?? '');
   }, [data]);
@@ -77,6 +80,7 @@ export function CompanySettingsPage() {
         abn,
         email,
         phone,
+        website,
         address,
         logoUrl,
       }),
@@ -104,8 +108,26 @@ export function CompanySettingsPage() {
       <Input label="ABN" value={abn} onChange={(e) => setAbn(e.target.value)} disabled={!canManage} />
       <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fieldError('email')} disabled={!canManage} />
       <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={!canManage} />
+      <Input label="Website" value={website} onChange={(e) => setWebsite(e.target.value)} disabled={!canManage} placeholder="www.sitescop.com.au" />
       <Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} disabled={!canManage} />
-      <Input label="Logo URL" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} error={fieldError('logoUrl')} disabled={!canManage} />
+      <Input
+        label="Logo URL or path"
+        value={logoUrl}
+        onChange={(e) => setLogoUrl(e.target.value)}
+        error={fieldError('logoUrl')}
+        disabled={!canManage}
+        placeholder={SITESCOP_LOGO_PATH}
+      />
+      {(logoUrl || SITESCOP_LOGO_PATH) && (
+        <div className="rounded-sm border border-border bg-background p-4">
+          <p className="mb-2 text-sm font-medium text-text">Logo preview</p>
+          <img
+            src={logoUrl || SITESCOP_LOGO_PATH}
+            alt={`${name || 'Company'} logo`}
+            className="max-h-36 max-w-[320px] object-contain"
+          />
+        </div>
+      )}
     </SettingsFormCard>
   );
 }

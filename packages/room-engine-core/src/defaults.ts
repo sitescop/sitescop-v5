@@ -9,10 +9,97 @@ import type {
   RoomCounts,
   RoomEngineType,
 } from './types.js';
-import { ACCESSIBILITY_AREAS, LIVING_AREA_NAMES } from './options.js';
+import { ACCESSIBILITY_AREAS, ELECTRICAL_WORKING, GENERAL_ELECTRICAL_DISCLAIMERS, KITCHEN_DISCLAIMERS, LAUNDRY_DISCLAIMERS, LICENSED_ELECTRICIAN_INSPECTION, LIVING_AREA_NAMES } from './options.js';
 
 export function emptyCheckboxField(): CheckboxFieldState {
   return { selected: [], custom: [] };
+}
+
+export function defaultElectricalDisclaimersField(): CheckboxFieldState {
+  return { selected: [...GENERAL_ELECTRICAL_DISCLAIMERS], custom: [] };
+}
+
+export function defaultKitchenDisclaimersField(): CheckboxFieldState {
+  return { selected: [...KITCHEN_DISCLAIMERS], custom: [] };
+}
+
+export function defaultLaundryDisclaimersField(): CheckboxFieldState {
+  return { selected: [...LAUNDRY_DISCLAIMERS], custom: [] };
+}
+
+export function defaultIfEmptyWorkingStatus(value: string): string {
+  return value?.trim() ? value : ELECTRICAL_WORKING;
+}
+
+export function defaultSmokeAlarmStatus(): string {
+  return LICENSED_ELECTRICIAN_INSPECTION;
+}
+
+export function defaultSwitchesStatus(): string {
+  return LICENSED_ELECTRICIAN_INSPECTION;
+}
+
+function setIfEmptyField(data: Record<string, unknown>, key: string, value: string): void {
+  if (!(key in data)) return;
+  if (!String(data[key] ?? '').trim()) data[key] = value;
+}
+
+export function applyLaundrySurfaceDefaults<T extends Record<string, unknown>>(laundry: T): T {
+  const next = { ...laundry };
+  setIfEmptyField(next, 'splashback', 'Good');
+  setIfEmptyField(next, 'floorType', 'Tiles');
+  setIfEmptyField(next, 'floorCondition', 'Good');
+  return next;
+}
+
+/** Sensible defaults for bathroom wet-area, tiling, and joinery fields. */
+export function applyBathroomRoomDefaults(data: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...data };
+  setIfEmptyField(next, 'floorTilesCondition', 'Good');
+  setIfEmptyField(next, 'floorTilesBrokenCracked', 'No');
+  setIfEmptyField(next, 'floorTilesLoose', 'No');
+  setIfEmptyField(next, 'floorTilesHollowSounding', 'No');
+  setIfEmptyField(next, 'wallTilesCondition', 'Good');
+  setIfEmptyField(next, 'wallTilesBrokenCracked', 'No');
+  setIfEmptyField(next, 'wallTilesLoose', 'No');
+  setIfEmptyField(next, 'wallTilesHollowSounding', 'No');
+  setIfEmptyField(next, 'groutMissing', 'No');
+  setIfEmptyField(next, 'groutDeteriorated', 'No');
+  setIfEmptyField(next, 'showerOperating', 'Yes');
+  setIfEmptyField(next, 'showerDrainage', 'Not Blocked');
+  setIfEmptyField(next, 'doorCondition', 'Good');
+  setIfEmptyField(next, 'doorOperating', 'Yes');
+  setIfEmptyField(next, 'doorMoistureDamage', 'No');
+  setIfEmptyField(next, 'doorJambCondition', 'Good');
+  setIfEmptyField(next, 'doorJambMoistureDamage', 'No');
+  setIfEmptyField(next, 'windowCondition', 'Good');
+  setIfEmptyField(next, 'windowOperating', 'Good');
+  setIfEmptyField(next, 'lightsWorking', 'Yes');
+  setIfEmptyField(next, 'siliconeCondition', 'Good');
+  setIfEmptyField(next, 'moistureDamage', 'None');
+  setIfEmptyField(next, 'toiletCracksDamage', 'No');
+  if ('switchesWorking' in next) {
+    next.switchesWorking = defaultSwitchesStatus();
+  }
+  return next;
+}
+
+/** Apply standard electrical guard defaults to persisted room data. */
+export function applyRoomElectricalDefaults(data: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...data };
+  if ('lights' in next) {
+    next.lights = defaultIfEmptyWorkingStatus(String(next.lights ?? ''));
+  }
+  if ('switches' in next) {
+    next.switches = defaultSwitchesStatus();
+  }
+  if ('powerPoints' in next) {
+    next.powerPoints = defaultIfEmptyWorkingStatus(String(next.powerPoints ?? ''));
+  }
+  if ('smokeAlarm' in next) {
+    next.smokeAlarm = defaultSmokeAlarmStatus();
+  }
+  return next;
 }
 
 /** Coerce persisted or legacy checkbox values into `{ selected, custom }`. */
@@ -48,16 +135,27 @@ export function normalizeCheckboxField(
   return { selected, custom };
 }
 
+const LEGACY_ACCESSIBILITY_AREA_LABELS: Record<string, string> = {
+  'Interior Obstructions': 'Interior',
+  'Exterior Obstructions': 'Exterior',
+};
+
+function remapAccessibilityAreaLabel(item: string): string {
+  return LEGACY_ACCESSIBILITY_AREA_LABELS[item] ?? item;
+}
+
 /** Merge preset accessibility area labels out of custom into selected (fixes duplicate Subfloor rows). */
 export function normalizeAccessibilityAreas(
   value: CheckboxFieldState | string[] | undefined | null,
 ): CheckboxFieldState {
   const field = normalizeCheckboxField(value);
   const presets = new Set<string>(ACCESSIBILITY_AREAS);
-  const fromCustom = field.custom.filter((item) => presets.has(item));
+  const selected = field.selected.map(remapAccessibilityAreaLabel);
+  const custom = field.custom.map(remapAccessibilityAreaLabel);
+  const fromCustom = custom.filter((item) => presets.has(item));
   return {
-    selected: [...new Set([...field.selected, ...fromCustom])],
-    custom: field.custom.filter((item) => !presets.has(item)),
+    selected: [...new Set([...selected, ...fromCustom])],
+    custom: custom.filter((item) => !presets.has(item)),
   };
 }
 
@@ -177,10 +275,15 @@ export function createEmptyFormData(prefill?: PrefillJobContext): BuildingInspec
       windowLock: '',
       door: '',
       handle: '',
-      lights: '',
-      switches: '',
-      powerPoints: '',
+      lights: ELECTRICAL_WORKING,
+      switches: LICENSED_ELECTRICIAN_INSPECTION,
+      powerPoints: ELECTRICAL_WORKING,
       moistureDamage: '',
+      disclaimers: defaultKitchenDisclaimersField(),
+    },
+    electricalGeneral: {
+      ...base,
+      disclaimers: defaultElectricalDisclaimersField(),
     },
     laundry: {
       ...base,
@@ -191,25 +294,24 @@ export function createEmptyFormData(prefill?: PrefillJobContext): BuildingInspec
       leakage: '',
       tapDripping: '',
       activeLeak: '',
-      splashback: '',
+      splashback: 'Good',
       waterPooling: 'No',
       waterPoolingPhotos: [],
       floorWaste: '',
       walls: emptyCheckboxField(),
       ceiling: emptyCheckboxField(),
-      floorType: '',
-      floorCondition: '',
+      floorType: 'Tiles',
+      floorCondition: 'Good',
       window: '',
-      windowOperation: '',
       windowLock: '',
       door: '',
-      doorOperation: '',
-      lockLatch: '',
-      lights: '',
-      switches: '',
-      powerPoints: '',
+      handle: '',
+      lights: ELECTRICAL_WORKING,
+      switches: LICENSED_ELECTRICIAN_INSPECTION,
+      powerPoints: ELECTRICAL_WORKING,
       exhaustFan: '',
       moistureLevel: '',
+      disclaimers: defaultLaundryDisclaimersField(),
     },
     subfloor: {
       ...base,
@@ -254,7 +356,7 @@ export function createEmptyFormData(prefill?: PrefillJobContext): BuildingInspec
     },
     riskAssessment: {
       ...base,
-      level: 'Moderate',
+      level: 'Low',
     },
     conclusion: {
       ...base,
@@ -299,10 +401,10 @@ export function createEmptyBedroomRoom(index: number): BedroomRoomData {
     floorCondition: '',
     walls: emptyCheckboxField(),
     ceiling: emptyCheckboxField(),
-    lights: '',
-    switches: '',
-    powerPoints: '',
-    smokeAlarm: '',
+    lights: ELECTRICAL_WORKING,
+    switches: LICENSED_ELECTRICIAN_INSPECTION,
+    powerPoints: ELECTRICAL_WORKING,
+    smokeAlarm: LICENSED_ELECTRICIAN_INSPECTION,
     damageObserved: emptyCheckboxField(),
   };
 }
@@ -320,48 +422,49 @@ export function createEmptyBathroomRoom(index: number): BathroomRoomData {
     tapsDripping: '',
     tapsActiveLeak: '',
     tapsCondition: '',
-    showerOperating: '',
-    showerDrainage: '',
+    showerOperating: 'Yes',
+    showerDrainage: 'Not Blocked',
     showerHeadLeaking: '',
     showerEvidenceOfLeakage: '',
     screenCondition: '',
     screenWaterEscaping: '',
     screenDamageCracks: '',
-    siliconeCondition: '',
-    siliconeFailedMissing: '',
-    siliconeMouldPresent: '',
-    waterEscapingObserved: '',
+    siliconeCondition: 'Good',
+    siliconeFailedMissing: 'No',
+    siliconeMouldPresent: 'No',
+    waterEscapingObserved: 'No',
     waterEscapingPhotos: [],
-    floorTilesBrokenCracked: '',
-    floorTilesLoose: '',
-    floorTilesHollowSounding: '',
-    floorTilesCondition: '',
-    wallTilesBrokenCracked: '',
-    wallTilesLoose: '',
-    wallTilesCondition: '',
-    groutMissing: '',
-    groutDeteriorated: '',
-    toiletFlushWorking: '',
-    toiletBlockage: '',
-    toiletLeakage: '',
-    toiletSecureStable: '',
-    toiletCracksDamage: '',
-    toiletSeatCondition: '',
-    doorMoistureDamage: '',
-    doorOperating: '',
-    doorCondition: '',
-    doorJambMoistureDamage: '',
-    doorJambCondition: '',
-    windowCondition: '',
-    windowOperating: '',
-    lightsWorking: '',
-    switchesWorking: '',
-    exhaustFanWorking: '',
-    exhaustFanNoise: '',
-    waterPoolingPresent: '',
+    floorTilesBrokenCracked: 'No',
+    floorTilesLoose: 'No',
+    floorTilesHollowSounding: 'No',
+    floorTilesCondition: 'Good',
+    wallTilesBrokenCracked: 'No',
+    wallTilesLoose: 'No',
+    wallTilesHollowSounding: 'No',
+    wallTilesCondition: 'Good',
+    groutMissing: 'No',
+    groutDeteriorated: 'No',
+    toiletFlushWorking: 'Yes',
+    toiletBlockage: 'No',
+    toiletLeakage: 'No',
+    toiletSecureStable: 'Yes',
+    toiletCracksDamage: 'No',
+    toiletSeatCondition: 'Good',
+    doorMoistureDamage: 'No',
+    doorOperating: 'Yes',
+    doorCondition: 'Good',
+    doorJambMoistureDamage: 'No',
+    doorJambCondition: 'Good',
+    windowCondition: 'Good',
+    windowOperating: 'Good',
+    lightsWorking: 'Yes',
+    switchesWorking: LICENSED_ELECTRICIAN_INSPECTION,
+    exhaustFanWorking: 'Yes',
+    exhaustFanNoise: 'No',
+    waterPoolingPresent: 'No',
     waterPoolingCause: emptyCheckboxField(),
     waterPoolingPhotos: [],
-    moistureDamage: '',
+    moistureDamage: 'None',
     moistureEvidencePhotos: [],
   };
 }
@@ -429,6 +532,53 @@ export function buildRoomsFromCounts(counts: RoomCounts): GeneratedRoom[] {
   }
 
   return rooms;
+}
+
+export function mergeSectionRecord<T extends Record<string, unknown>>(
+  defaults: T,
+  actual: Partial<T> | undefined,
+): T {
+  if (!actual) return { ...defaults };
+  const merged = { ...defaults, ...actual } as T;
+  for (const key of Object.keys(defaults) as (keyof T)[]) {
+    const defVal = defaults[key];
+    const actVal = actual[key];
+    if (actVal === undefined || actVal === null) continue;
+    if (isCheckboxDefault(defVal) || isCheckboxDefault(actVal)) {
+      merged[key] = normalizeCheckboxField(actVal as CheckboxFieldState | string[] | null) as T[keyof T];
+    } else if (Array.isArray(actVal)) {
+      merged[key] = actVal as T[keyof T];
+    } else {
+      merged[key] = actVal as T[keyof T];
+    }
+  }
+  return merged;
+}
+
+function isCheckboxDefault(val: unknown): val is CheckboxFieldState {
+  return Boolean(val && typeof val === 'object' && !Array.isArray(val) && 'selected' in val);
+}
+
+export function mergeRoomDataForReport(
+  roomType: string,
+  roomIndex: number,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const defaults =
+    roomType === 'BEDROOM'
+      ? createEmptyBedroomRoom(roomIndex)
+      : roomType === 'BATHROOM'
+        ? createEmptyBathroomRoom(roomIndex)
+        : roomType === 'LIVING'
+          ? createEmptyLivingRoom(roomIndex)
+          : createEmptyGarageRoom(roomIndex);
+  return roomType === 'BATHROOM'
+    ? applyBathroomRoomDefaults(
+        mergeSectionRecord(defaults as unknown as Record<string, unknown>, data),
+      )
+    : applyRoomElectricalDefaults(
+        mergeSectionRecord(defaults as unknown as Record<string, unknown>, data),
+      );
 }
 
 export function getRoomCountsFromForm(form: BuildingInspectionFormData): RoomCounts {

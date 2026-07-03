@@ -91,6 +91,8 @@ export interface SignAgreementRequest {
   signatureName: string;
   signatureData: string;
   declarationsAccepted: boolean;
+  propertyAddress?: string;
+  clientPhone?: string;
 }
 
 export interface DeclineAgreementRequest {
@@ -112,10 +114,26 @@ export interface PublicAgreementView {
   agreementDate: string;
   legalSections: AgreementLegalContent;
   canSign: boolean;
+  propertyPending: boolean;
 }
 
 export interface SendAgreementResponse {
   agreement: AgreementDetail;
   signingUrl: string;
   devSigningUrl?: string;
+  emailSent: boolean;
+}
+
+export interface SendNewAgreementRequest {
+  type: JobType;
+  clientName: string;
+  clientEmail: string;
+  clientPhone?: string;
+  propertyAddress?: string;
+  priceCents: number;
+  notes?: string;
+}
+
+export interface CreateAndSendAgreementResponse extends SendAgreementResponse {
+  contactCreated: boolean;
 }

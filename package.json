@@ -37,6 +37,8 @@
     "esbuild@0.25.12": true,
     "prisma@6.19.3": true,
     "embedded-postgres@17.10.0-beta.17": true,
-    "@embedded-postgres/windows-x64@17.10.0-beta.17": true
+    "@embedded-postgres/windows-x64@17.10.0-beta.17": true,
+    "puppeteer@24.8.2": true,
+    "puppeteer@24.43.1": true
   }
 }

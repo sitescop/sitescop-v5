@@ -4,19 +4,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { JOB_TYPE_LABELS, JobType } from '@sitescop/shared-types';
 import { jobsApi } from '@/lib/api/jobs';
 import { crmApi } from '@/lib/api/crm';
+import { settingsApi } from '@/lib/api/settings';
 import { useFormErrors } from '@/lib/hooks/useFormErrors';
+import { ContactSearchPicker } from '@/modules/crm/components/ContactSearchPicker';
 import { Button, Card, Input, PageHeader, Select, Textarea } from '@/design-system/components';
 import { ContactType } from '@sitescop/shared-types';
-
-const TITLE_OPTIONS = [
-  { value: '', label: 'None' },
-  { value: 'Mr', label: 'Mr' },
-  { value: 'Mrs', label: 'Mrs' },
-  { value: 'Miss', label: 'Miss' },
-  { value: 'Ms', label: 'Ms' },
-  { value: 'Dr', label: 'Dr' },
-  { value: 'Mx', label: 'Mx' },
-];
 
 function buildJobTitle(type: JobType, addressLine1: string, suburb: string): string {
   const label = JOB_TYPE_LABELS[type];
@@ -24,61 +16,74 @@ function buildJobTitle(type: JobType, addressLine1: string, suburb: string): str
   return location ? `${label} — ${location}` : label;
 }
 
+function defaultPriceForType(
+  type: JobType,
+  preferences: {
+    defaultBuildingPrice: number | null;
+    defaultPestPrice: number | null;
+    defaultCombinedPrice: number | null;
+  },
+): string {
+  let cents: number | null = null;
+  switch (type) {
+    case JobType.BUILDING:
+    case JobType.PRE_PURCHASE:
+    case JobType.PRE_SALE:
+      cents = preferences.defaultBuildingPrice;
+      break;
+    case JobType.PEST:
+      cents = preferences.defaultPestPrice;
+      break;
+    case JobType.COMBINED:
+      cents = preferences.defaultCombinedPrice;
+      break;
+    default:
+      cents = preferences.defaultBuildingPrice;
+  }
+  return cents != null ? String(cents / 100) : '';
+}
+
 interface ContactPickerProps {
   label: string;
+  required?: boolean;
   title: string;
   contactId: string;
   onTitleChange: (value: string) => void;
   onContactChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
+  contactType: ContactType;
+  requireEmail?: boolean;
   error?: string;
+  hint?: string;
+  searchPlaceholder?: string;
 }
 
 function ContactPicker({
   label,
+  required,
   title,
   contactId,
   onTitleChange,
   onContactChange,
-  options,
+  contactType,
+  requireEmail,
   error,
+  hint,
+  searchPlaceholder,
 }: ContactPickerProps) {
   return (
-    <div className="w-full">
-      <label className="form-label">{label}</label>
-      <div className="flex gap-2">
-        <select
-          className="form-input w-[5.5rem] shrink-0 px-2 text-sm"
-          value={title}
-          onChange={(e) => onTitleChange(e.target.value)}
-          aria-label={`${label} title`}
-        >
-          {TITLE_OPTIONS.map((opt) => (
-            <option key={opt.value || 'none'} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="form-input min-w-0 flex-1"
-          value={contactId}
-          onChange={(e) => onContactChange(e.target.value)}
-          aria-label={label}
-        >
-          <option value="">Select...</option>
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
+    <ContactSearchPicker
+      label={label}
+      contactType={contactType}
+      value={contactId}
+      onChange={onContactChange}
+      title={title}
+      onTitleChange={onTitleChange}
+      required={required}
+      requireEmail={requireEmail}
+      error={error}
+      hint={hint}
+      searchPlaceholder={searchPlaceholder}
+    />
   );
 }
 
@@ -104,6 +109,11 @@ export function JobFormPage() {
   const [scheduledTime, setScheduledTime] = useState('');
   const [price, setPrice] = useState('');
   const [notes, setNotes] = useState('');
+  const [priceTouched, setPriceTouched] = useState(false);
+  const [clientMode, setClientMode] = useState<'existing' | 'new'>('new');
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
 
   const { data: jobData } = useQuery({
     queryKey: ['job', id],
@@ -111,15 +121,19 @@ export function JobFormPage() {
     enabled: isEdit,
   });
 
-  const { data: clientsData } = useQuery({
-    queryKey: ['crm-contacts', ContactType.CLIENT],
-    queryFn: () => crmApi.list({ type: ContactType.CLIENT, pageSize: '100' }),
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings-company'],
+    queryFn: () => settingsApi.get(),
+    enabled: !isEdit,
   });
 
-  const { data: agentsData } = useQuery({
-    queryKey: ['crm-contacts', ContactType.AGENT],
-    queryFn: () => crmApi.list({ type: ContactType.AGENT, pageSize: '100' }),
+  const { data: selectedClientData } = useQuery({
+    queryKey: ['crm-contact', clientContactId],
+    queryFn: () => crmApi.get(clientContactId),
+    enabled: Boolean(clientContactId),
   });
+
+  const selectedClient = selectedClientData?.contact;
 
   useEffect(() => {
     if (!jobData?.job) return;
@@ -136,14 +150,59 @@ export function JobFormPage() {
     setScheduledTime(job.scheduledTime ?? '');
     setPrice(job.priceCents != null ? String(job.priceCents / 100) : '');
     setNotes(job.notes ?? '');
+    setPriceTouched(true);
   }, [jobData]);
+
+  useEffect(() => {
+    if (isEdit || priceTouched || !settingsData?.preferences) return;
+    setPrice(defaultPriceForType(type, settingsData.preferences));
+  }, [isEdit, priceTouched, settingsData, type]);
 
   const mutation = useMutation({
     mutationFn: async () => {
+      let resolvedClientId = clientContactId;
+
+      if (clientMode === 'new') {
+        if (!newClientName.trim() || !newClientEmail.trim()) {
+          throw new Error('Client name and email are required');
+        }
+        const parts = newClientName.trim().split(/\s+/);
+        const firstName = parts[0] ?? 'Client';
+        const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '-';
+        const created = await crmApi.create({
+          type: ContactType.CLIENT,
+          firstName,
+          lastName,
+          email: newClientEmail.trim(),
+          phone: newClientPhone.trim() || undefined,
+        });
+        resolvedClientId = created.contact.id;
+      }
+
+      if (!resolvedClientId) {
+        throw new Error('Client is required');
+      }
+
+      const clientRecord =
+        clientMode === 'new'
+          ? { email: newClientEmail.trim() }
+          : selectedClient;
+
+      if (!clientRecord?.email?.trim()) {
+        throw new Error('Selected client must have an email address. Add it in CRM first.');
+      }
+      if (!addressLine1.trim() || !suburb.trim() || !postcode.trim()) {
+        throw new Error('Property address, suburb, and postcode are required');
+      }
+      const priceValue = Number.parseFloat(price);
+      if (!price || Number.isNaN(priceValue) || priceValue <= 0) {
+        throw new Error('Price is required');
+      }
+
       const payload = {
         title: buildJobTitle(type, addressLine1, suburb),
         type,
-        clientContactId: clientContactId || undefined,
+        clientContactId: resolvedClientId,
         agentContactId: agentContactId || undefined,
         property: {
           addressLine1,
@@ -154,7 +213,7 @@ export function JobFormPage() {
         },
         scheduledDate: scheduledDate ? new Date(scheduledDate).toISOString() : undefined,
         scheduledTime: scheduledTime || undefined,
-        priceCents: price ? Math.round(Number.parseFloat(price) * 100) : undefined,
+        priceCents: Math.round(priceValue * 100),
         notes: notes || undefined,
       };
 
@@ -178,20 +237,16 @@ export function JobFormPage() {
   };
 
   const jobTypeOptions = Object.entries(JOB_TYPE_LABELS).map(([value, label]) => ({ value, label }));
-  const clientOptions = (clientsData?.contacts ?? []).map((c) => ({
-    value: c.id,
-    label: c.displayName,
-  }));
-  const agentOptions = (agentsData?.contacts ?? []).map((c) => ({
-    value: c.id,
-    label: c.displayName,
-  }));
 
   return (
     <div>
       <PageHeader
         title={isEdit ? 'Edit Job' : 'Create Job'}
-        description={isEdit ? 'Update job details' : 'Add a new inspection job'}
+        description={
+          isEdit
+            ? 'Update job details'
+            : 'Capture client, property, and price — then send an agreement from the job page'
+        }
         breadcrumbs={[
           { label: 'Jobs', href: '/jobs' },
           { label: isEdit ? 'Edit' : 'New' },
@@ -199,34 +254,117 @@ export function JobFormPage() {
       />
 
       <Card className="max-w-3xl p-6">
-        <form className="space-y-6" onSubmit={onSubmit}>
+        {!isEdit && (
+          <div className="mb-6 rounded-sm border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-text">
+            For new enquiries, use <Link className="font-medium text-primary hover:underline" to="/agreements/send">Agreements → Send Agreement</Link> first.
+            Use this form when you already need a job record (repeat clients or manual jobs).
+          </div>
+        )}
+
+        <form className="space-y-8" onSubmit={onSubmit}>
           {formError && (
             <div className="rounded-sm border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
               {formError}
             </div>
           )}
 
-          <ContactPicker
-            label="Agent"
-            title={agentTitle}
-            contactId={agentContactId}
-            onTitleChange={setAgentTitle}
-            onContactChange={setAgentContactId}
-            options={agentOptions}
-          />
+          <section className="space-y-4">
+            <h3 className="inspection-subsection-heading">Inspection type</h3>
+            <Select
+              label="Job Type"
+              name="type"
+              value={type}
+              onChange={(e) => setType(e.target.value as JobType)}
+              options={jobTypeOptions}
+              error={fieldError('type')}
+            />
+          </section>
 
-          <ContactPicker
-            label="Client"
-            title={clientTitle}
-            contactId={clientContactId}
-            onTitleChange={setClientTitle}
-            onContactChange={setClientContactId}
-            options={clientOptions}
-            error={fieldError('clientContactId')}
-          />
+          <section className="space-y-4">
+            <h3 className="inspection-subsection-heading">People</h3>
 
-          <div className="space-y-4">
-            <h3 className="inspection-subsection-heading">Property Address</h3>
+            {!isEdit && (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={clientMode === 'new' ? 'primary' : 'secondary'}
+                  onClick={() => setClientMode('new')}
+                >
+                  New client
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={clientMode === 'existing' ? 'primary' : 'secondary'}
+                  onClick={() => setClientMode('existing')}
+                >
+                  Existing client
+                </Button>
+              </div>
+            )}
+
+            {clientMode === 'new' && !isEdit ? (
+              <div className="space-y-4">
+                <Input
+                  label="Client Name"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  required
+                />
+                <Input
+                  label="Client Email"
+                  type="email"
+                  value={newClientEmail}
+                  onChange={(e) => setNewClientEmail(e.target.value)}
+                  required
+                />
+                <Input
+                  label="Client Mobile"
+                  type="tel"
+                  value={newClientPhone}
+                  onChange={(e) => setNewClientPhone(e.target.value)}
+                />
+                <p className="text-xs text-text-light">
+                  Saved to CRM automatically when you create the job.
+                </p>
+              </div>
+            ) : (
+              <>
+                <ContactPicker
+                  label="Client"
+                  required
+                  title={clientTitle}
+                  contactId={clientContactId}
+                  onTitleChange={setClientTitle}
+                  onContactChange={setClientContactId}
+                  contactType={ContactType.CLIENT}
+                  requireEmail
+                  error={fieldError('clientContactId')}
+                  hint="Search by name, email, or phone."
+                  searchPlaceholder="Search clients…"
+                />
+                <Button variant="secondary" size="sm" asChild>
+                  <Link to="/crm/new">Add new client in CRM</Link>
+                </Button>
+              </>
+            )}
+
+            <ContactPicker
+              label="Agent"
+              title={agentTitle}
+              contactId={agentContactId}
+              onTitleChange={setAgentTitle}
+              onContactChange={setAgentContactId}
+              contactType={ContactType.AGENT}
+              hint="Optional. Selling or managing agent for the property."
+              searchPlaceholder="Search agents…"
+            />
+          </section>
+
+          <section className="space-y-4">
+            <h3 className="inspection-subsection-heading">Property address</h3>
+            <p className="text-sm text-text-light">Required. Appears on the agreement, invoice, and inspection report.</p>
             <Input
               label="Address Line 1"
               value={addressLine1}
@@ -243,27 +381,44 @@ export function JobFormPage() {
                 error={fieldError('property.suburb')}
                 required
               />
-              <Input label="State" value={state} onChange={(e) => setState(e.target.value)} error={fieldError('property.state')} />
-              <Input label="Postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} error={fieldError('property.postcode')} />
+              <Input label="State" value={state} onChange={(e) => setState(e.target.value)} error={fieldError('property.state')} required />
+              <Input label="Postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} error={fieldError('property.postcode')} required />
             </div>
-          </div>
+          </section>
 
-          <Select
-            label="Job Type"
-            name="type"
-            value={type}
-            onChange={(e) => setType(e.target.value as JobType)}
-            options={jobTypeOptions}
-            error={fieldError('type')}
-          />
+          <section className="space-y-4">
+            <h3 className="inspection-subsection-heading">Pricing & schedule</h3>
+            <Input
+              label="Price (AUD, ex GST)"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={price}
+              onChange={(e) => {
+                setPriceTouched(true);
+                setPrice(e.target.value);
+              }}
+              error={fieldError('priceCents')}
+              required
+            />
+            <p className="text-xs text-text-light">Required. Flows to the agreement and invoice. GST is calculated automatically.</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <Input label="Scheduled Date" type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} />
+                <p className="mt-1 text-xs text-text-light">Optional. When the inspection is planned.</p>
+              </div>
+              <div>
+                <Input label="Scheduled Time" placeholder="10:00" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />
+                <p className="mt-1 text-xs text-text-light">Optional.</p>
+              </div>
+            </div>
+          </section>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Input label="Scheduled Date" type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} />
-            <Input label="Scheduled Time" placeholder="10:00" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />
-            <Input label="Price (AUD)" type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} error={fieldError('priceCents')} />
-          </div>
-
-          <Textarea label="Internal Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <section className="space-y-4">
+            <h3 className="inspection-subsection-heading">Internal notes</h3>
+            <Textarea label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <p className="text-xs text-text-light">Optional. Office-only — not shown to the client.</p>
+          </section>
 
           <div className="flex flex-wrap gap-3">
             <Button type="submit" isLoading={mutation.isPending}>

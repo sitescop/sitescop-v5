@@ -89,8 +89,11 @@ export interface PestConclusionSection extends SectionBase {
   recommendationsInSectionD: string;
   futureInspectionFrequency: string;
   futureInspectionOther: string;
+  autoConclusion: string;
+  autoRecommendations: string[];
   inspectorName: string;
   licenceNumber: string;
+  signatureData: string;
   declarationDate: string;
   reportComplete: boolean;
 }
@@ -134,7 +137,7 @@ export const PEST_INSPECTION_SECTION_KEYS: PestInspectionSectionKey[] = [
 ];
 
 export const PEST_INSPECTION_SECTION_LABELS: Record<PestInspectionSectionKey, string> = {
-  undetectedTimberPestRisk: 'Undetected Timber Pest Risk',
+  undetectedTimberPestRisk: 'Risk Assessment',
   d1ActiveTermites: 'D1 Active (Live) Termites',
   d2ManagementProposal: 'D2 Subterranean Termite Management Proposal',
   d3TermiteWorkings: 'D3 Termite Workings and/or Damage',
@@ -148,5 +151,5 @@ export const PEST_INSPECTION_SECTION_LABELS: Record<PestInspectionSectionKey, st
   d11BarrierBridging: 'D11 Bridging of Termite Barriers',
   d13ConduciveConditions: 'D13 Other Conditions Conducive',
   d14MajorSafetyHazards: 'D14 Major Safety Hazards',
-  pestConclusion: 'Section E — Conclusion',
+  pestConclusion: 'Section E — Conclusion & Inspector Declaration',
 };

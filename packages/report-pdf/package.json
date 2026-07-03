@@ -1,0 +1,22 @@
+{
+  "name": "@sitescop/report-pdf",
+  "version": "5.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Inspection report HTML templates and PDF generation",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sitescop/room-engine-core": "*",
+    "@sitescop/shared-types": "*",
+    "puppeteer": "^24.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "typescript": "^5.8.3"
+  }
+}

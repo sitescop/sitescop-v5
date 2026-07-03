@@ -6,4 +6,6 @@ export * from './pest-types.js';
 export * from './pest-options.js';
 export * from './pest-defaults.js';
 export * from './pest-conclusion.js';
+export * from './hazard-assessment.js';
+export * from './risk-assessment.js';
 export * from './form-data.js';

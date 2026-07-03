@@ -1,6 +1,8 @@
 /** Pest inspection option lists (AS 4349.3 timber pest workflow). */
 
-export const TIMBER_PEST_RISK_LEVELS = ['High', 'Moderate-high'] as const;
+import { RISK_LEVELS } from './options.js';
+
+export const TIMBER_PEST_RISK_LEVELS = RISK_LEVELS;
 
 export const TERMITE_EVIDENCE_ANSWERS = [
   'No',
@@ -55,6 +57,23 @@ export const FUNGAL_DECAY_LOCATIONS = [
   'Pergola',
   'Landscaping Timbers',
   'Tree Stumps',
+  'Other',
+] as const;
+
+export const CHEMICAL_DELIGNIFICATION_EVIDENCE = [
+  'Roof Timbers',
+  'Wall Frames',
+  'Floor Timbers',
+  'Pole Structures',
+  'Decking Timbers',
+  'Other',
+] as const;
+
+export const MAJOR_SAFETY_HAZARD_ITEMS = [
+  'Asbestos Suspected',
+  'Electrical Hazard',
+  'Structural Hazard',
+  'Trip Hazard',
   'Other',
 ] as const;
 
@@ -143,3 +162,20 @@ export const D10_EVIDENCE_REPORT_PREFIX =
   'At time of inspection elevated moisture readings were located in, but not necessarily limited to the:';
 
 export const D10_STAINS_REPORT_PREFIX = 'At time of inspection moisture stains were located to:';
+
+/** Wet-area moisture presets that suggest waterproofing / silicone re-sealing. */
+export const BATHROOM_MOISTURE_LOCATION_PRESETS = [
+  'Rear of main Shower',
+  'Rear of ensuite shower',
+  'Wet area flooring',
+] as const;
+
+/** Roof/ceiling moisture presets that suggest a licensed roofer or roof plumber. */
+export const ROOF_MOISTURE_LOCATION_PRESETS = [
+  'Roof space interior',
+  'Staining in eave sheets',
+  'Various ceiling sheets',
+] as const;
+
+/** Plumbing-related moisture presets that suggest a licensed plumber. */
+export const PLUMBING_MOISTURE_LOCATION_PRESETS = ['Under laundry tub'] as const;
