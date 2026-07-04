@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Bell, LogOut, Menu, Search, User } from 'lucide-react';
+import { Bell, LogOut, Menu, User } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { USER_ROLE_LABELS } from '@sitescop/shared-types';
 import { useAuthStore } from '@/modules/auth/store/auth-store';
@@ -9,6 +9,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { Badge } from '@/design-system/components/Badge';
 import { Button } from '@/design-system/components/Button';
 import { cn } from '@/lib/utils';
+import { GlobalSearch, GlobalSearchMobileTrigger } from '@/components/GlobalSearch';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -75,19 +76,11 @@ export function TopBar({ onMenuClick }: TopBarProps) {
         <Menu className="h-5 w-5" />
       </button>
 
-      <div className="relative hidden max-w-md flex-1 md:block">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden />
-        <input
-          type="search"
-          placeholder="Search jobs, clients, agreements..."
-          className="form-input pl-10"
-          aria-label="Global search"
-          disabled
-          title="Global search available in Phase 1"
-        />
-      </div>
+      <GlobalSearchMobileTrigger />
 
-      <div className="ml-auto flex items-center gap-2">
+      <GlobalSearch className="hidden max-w-md flex-1 md:block" />
+
+      <div className="ml-auto flex items-center gap-2 md:ml-0">
         <DropdownMenu.Root open={notificationsOpen} onOpenChange={setNotificationsOpen}>
           <DropdownMenu.Trigger asChild>
             <button

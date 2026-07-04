@@ -86,7 +86,7 @@ export function AgreementFormPage() {
     mutationFn: () => {
       const email = clientEmail.trim().toLowerCase();
       const officeFrom = settingsData?.preferences?.emailFromAddress?.trim().toLowerCase();
-      const officeCompany = settingsData?.profile?.email?.trim().toLowerCase();
+      const officeCompany = settingsData?.company?.email?.trim().toLowerCase();
       if (email && (email === officeFrom || email === officeCompany)) {
         throw new Error(
           'Use the client\'s personal email (e.g. john@gmail.com), not your office address (info@sitescop.com.au). Emails are sent FROM your office TO the client.',
@@ -110,6 +110,7 @@ export function AgreementFormPage() {
           emailSent: result.emailSent,
           contactCreated: result.contactCreated,
           signingUrl: result.devSigningUrl ?? result.signingUrl,
+          emailError: result.emailError,
         },
       });
     },

@@ -18,6 +18,17 @@ export enum JobType {
   OTHER = 'OTHER',
 }
 
+/** How the client contract was obtained — digital agreement flow vs signed paper. */
+export enum JobContractSource {
+  DIGITAL = 'DIGITAL',
+  MANUAL_PAPER = 'MANUAL_PAPER',
+}
+
+export const JOB_CONTRACT_SOURCE_LABELS: Record<JobContractSource, string> = {
+  [JobContractSource.DIGITAL]: 'Digital agreement',
+  [JobContractSource.MANUAL_PAPER]: 'Paper contract',
+};
+
 export enum AssignmentStatus {
   PENDING = 'PENDING',
   ACCEPTED = 'ACCEPTED',
@@ -88,7 +99,10 @@ export interface JobSummary {
   jobNumber: string;
   title: string;
   type: JobType;
+  contractSource: JobContractSource;
   status: JobStatus;
+  /** Latest inspection report status for workflow display (Start Inspection / In Progress / Complete). */
+  inspectionStatus: import('./inspections.js').InspectionStatus | null;
   scheduledDate: string | null;
   scheduledTime: string | null;
   priceCents: number | null;
@@ -146,4 +160,16 @@ export interface AssignJobRequest {
 
 export interface DeclineJobRequest {
   reason?: string;
+}
+
+export interface CreateManualJobRequest {
+  type: JobType;
+  clientName: string;
+  clientEmail?: string;
+  clientPhone: string;
+  propertyAddress: string;
+  priceCents?: number;
+  notes?: string;
+  /** When set by office staff, assign this inspector (defaults to self for inspectors). */
+  inspectorId?: string;
 }

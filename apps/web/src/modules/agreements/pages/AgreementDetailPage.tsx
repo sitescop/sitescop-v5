@@ -22,6 +22,7 @@ export function AgreementDetailPage() {
     emailSent?: boolean;
     contactCreated?: boolean;
     signingUrl?: string;
+    emailError?: string;
   } | null;
   const queryClient = useQueryClient();
   const canSend = useAuthStore((s) => s.hasPermission('agreements:send'));
@@ -147,9 +148,8 @@ export function AgreementDetailPage() {
           </p>
           {!sentState.emailSent && (
             <p className="mt-2">
-              SMTP is not running or not configured. Copy the signing link from the popup and send it
-              to the client (SMS, WhatsApp, or paste into an email). For local testing, start Mailpit
-              and restart the API — see instructions below.
+              {sentState.emailError ??
+                'Email could not be sent. Check Settings → email / .env SMTP settings, then restart the API.'}
             </p>
           )}
         </div>
@@ -157,15 +157,25 @@ export function AgreementDetailPage() {
 
       {agreement.status === AgreementStatus.SIGNED && !agreement.jobId && (
         <div className="mb-6 rounded-sm border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-text">
-          Client signed. Invoice was emailed automatically. When payment is received, go to{' '}
+          Client signed. When payment is received, go to{' '}
           <Link className="font-medium text-primary hover:underline" to="/accounts">
             Accounts
           </Link>{' '}
-          and click <strong>Mark as Paid</strong> — a job will be created and you can assign an inspector.
+          and click <strong>Mark as Paid</strong> — a job will be created and assigned.
         </div>
       )}
 
-      {agreement.jobId && (
+      {agreement.status === AgreementStatus.SIGNED && agreement.jobId && (
+        <div className="mb-6 rounded-sm border border-success/40 bg-success/10 px-4 py-3 text-sm text-text">
+          Client signed and job{' '}
+          <Link className="font-medium text-primary hover:underline" to={`/jobs/${agreement.jobId}`}>
+            {agreement.jobNumber}
+          </Link>{' '}
+          is in your Jobs list. Record on-site payment on the job page, then start the inspection.
+        </div>
+      )}
+
+      {agreement.jobId && agreement.status !== AgreementStatus.SIGNED && (
         <div className="mb-6 rounded-sm border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-text">
           Job{' '}
           <Link className="font-medium text-primary hover:underline" to={`/jobs/${agreement.jobId}`}>

@@ -6,7 +6,6 @@ import { LoginPage } from '@/modules/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '@/modules/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/modules/auth/pages/ResetPasswordPage';
 import { DashboardPage } from '@/modules/dashboard/pages/DashboardPage';
-import { ModulePlaceholder } from '@/design-system/components/ModulePlaceholder';
 import { JobsRoutes } from '@/modules/jobs/JobsRoutes';
 import { CrmRoutes } from '@/modules/crm/CrmRoutes';
 import { SettingsRoutes } from '@/modules/settings/SettingsRoutes';
@@ -16,6 +15,9 @@ import { AgreementSignPage } from '@/modules/agreements/pages/AgreementSignPage'
 import { InspectionsRoutes } from '@/modules/inspections/InspectionsRoutes';
 import { ReportsRoutes } from '@/modules/reports/ReportsRoutes';
 import { AccountsRoutes } from '@/modules/accounts/AccountsRoutes';
+import { CalendarRoutes } from '@/modules/calendar/CalendarRoutes';
+import { ClientPortalPage } from '@/modules/portal/pages/ClientPortalPage';
+import { HomeRedirect } from '@/modules/auth/components/HomeRedirect';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,8 +45,17 @@ export function AppRouter() {
               </RequireAuth>
             }
           >
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={<HomeRedirect />} />
             <Route path="dashboard" element={<DashboardPage />} />
+
+            <Route
+              path="portal"
+              element={
+                <RequirePermission permission="client:portal">
+                  <ClientPortalPage />
+                </RequirePermission>
+              }
+            />
 
             <Route
               path="jobs/*"
@@ -86,7 +97,7 @@ export function AppRouter() {
               path="calendar/*"
               element={
                 <RequirePermission permission="calendar:view">
-                  <ModulePlaceholder title="Calendar" description="Inspector scheduling" phase="Phase 5" />
+                  <CalendarRoutes />
                 </RequirePermission>
               }
             />

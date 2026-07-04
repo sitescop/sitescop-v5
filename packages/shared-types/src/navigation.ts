@@ -12,10 +12,25 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   {
+    id: 'portal',
+    label: 'My Portal',
+    href: '/portal',
+    icon: 'Home',
+    permission: 'client:portal',
+  },
+  {
     id: 'dashboard',
     label: 'Dashboard',
     href: '/dashboard',
     icon: 'LayoutDashboard',
+    roles: [
+      UserRole.SUPER_ADMIN,
+      UserRole.COMPANY_ADMIN,
+      UserRole.OFFICE_MANAGER,
+      UserRole.OFFICE_STAFF,
+      UserRole.INSPECTOR,
+      UserRole.ACCOUNTANT,
+    ],
   },
   {
     id: 'jobs',

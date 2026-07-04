@@ -157,6 +157,8 @@ function mapSummary(row: InspectionWithRelations): InspectionSummary {
     clientName: row.job.clientContact
       ? `${row.job.clientContact.firstName} ${row.job.clientContact.lastName}`.trim()
       : null,
+    clientPhone: row.job.clientContact?.phone?.trim() || null,
+    clientEmail: row.job.clientContact?.email?.trim() || null,
     inspectorName: row.inspector ? mapUserSummary(row.inspector).displayName : null,
     progressPercent: row.progressPercent,
     startedAt: row.startedAt?.toISOString() ?? null,
@@ -383,9 +385,17 @@ export async function createInspectionFromJob(
 
   await assertJobReadyForInspection(jobId, companyId);
 
+  const existingInspectionCount = await prisma.inspection.count({
+    where: { jobId, companyId },
+  });
+
   const allowedStatuses: JobStatus[] = [JobStatus.ACCEPTED, JobStatus.IN_PROGRESS];
   if (!allowedStatuses.includes(job.status)) {
-    throw new AppError('Job must be accepted or in progress to start an inspection', 'INVALID_STATE');
+    if (job.status === JobStatus.COMPLETED && existingInspectionCount === 0) {
+      // Recovery path: job was marked complete before an inspection was started.
+    } else {
+      throw new AppError('Job must be accepted or in progress to start an inspection', 'INVALID_STATE');
+    }
   }
 
   const existing = await prisma.inspection.findFirst({
@@ -408,10 +418,10 @@ export async function createInspectionFromJob(
   const counts = formData.shared.propertyDescription;
 
   const row = await prisma.$transaction(async (tx) => {
-    if (job.status === JobStatus.ACCEPTED) {
+    if (job.status === JobStatus.ACCEPTED || job.status === JobStatus.COMPLETED) {
       await tx.job.update({
         where: { id: jobId },
-        data: { status: JobStatus.IN_PROGRESS },
+        data: { status: JobStatus.IN_PROGRESS, completedAt: null },
       });
     }
 

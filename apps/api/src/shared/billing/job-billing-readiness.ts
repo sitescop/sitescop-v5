@@ -4,6 +4,14 @@ import { AgreementStatus as SharedAgreementStatus, InvoiceStatus as SharedInvoic
 import { AppError } from '../http/errors.js';
 import { prisma } from '../database/prisma.js';
 
+export async function isManualPaperJob(jobId: string, companyId: string): Promise<boolean> {
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, companyId },
+    select: { contractSource: true },
+  });
+  return job?.contractSource === 'MANUAL_PAPER';
+}
+
 export async function getJobBillingStatus(jobId: string, companyId: string): Promise<JobBillingStatus> {
   const [signedAgreement, paidInvoice, pendingInvoice, activeAgreement, activeInvoice] = await Promise.all([
     prisma.agreement.findFirst({
@@ -76,6 +84,10 @@ export async function getJobBillingStatus(jobId: string, companyId: string): Pro
 }
 
 export async function assertJobReadyForInspection(jobId: string, companyId: string): Promise<void> {
+  if (await isManualPaperJob(jobId, companyId)) {
+    return;
+  }
+
   const billing = await getJobBillingStatus(jobId, companyId);
   if (!billing.readyForInspection) {
     const missing: string[] = [];

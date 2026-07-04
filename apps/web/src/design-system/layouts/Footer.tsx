@@ -4,7 +4,7 @@ export function Footer() {
       <div className="flex flex-col items-center justify-between gap-2 text-xs text-text-light sm:flex-row">
         <p>&copy; {new Date().getFullYear()} SiteScop Inspections. All rights reserved.</p>
         <p>
-          SiteScop V5 &middot; Phase 3
+          SiteScop V5 &middot; Phase 6
         </p>
       </div>
     </footer>

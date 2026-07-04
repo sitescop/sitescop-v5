@@ -1,5 +1,5 @@
-import { JobStatus } from '@prisma/client';
-import { JOB_TYPE_LABELS, JobType } from '@sitescop/shared-types';
+import { AssignmentStatus, JobStatus } from '@prisma/client';
+import { JOB_TYPE_LABELS, JobType, UserRole } from '@sitescop/shared-types';
 import { NotFoundError } from '../http/errors.js';
 import { generateJobNumber } from '../mappers/index.js';
 import { prisma } from '../database/prisma.js';
@@ -30,10 +30,31 @@ function propertyFieldsFromAddress(address: string): {
   };
 }
 
+export async function resolveInspectorAssigneeFromAgreement(
+  agreementId: string,
+  companyId: string,
+): Promise<string | undefined> {
+  const agreement = await prisma.agreement.findFirst({
+    where: { id: agreementId, companyId },
+    select: {
+      createdById: true,
+      createdBy: { select: { role: true, status: true } },
+    },
+  });
+  if (
+    agreement?.createdBy.role === UserRole.INSPECTOR &&
+    agreement.createdBy.status === 'ACTIVE'
+  ) {
+    return agreement.createdById;
+  }
+  return undefined;
+}
+
 export async function createJobFromAgreement(
   agreementId: string,
   companyId: string,
   createdById: string,
+  assignInspectorId?: string,
 ): Promise<string> {
   const agreement = await prisma.agreement.findFirst({
     where: { id: agreementId, companyId },
@@ -44,6 +65,7 @@ export async function createJobFromAgreement(
   const jobNumber = await generateJobNumber(companyId);
   const propertyData = propertyFieldsFromAddress(agreement.propertyAddress);
   const typeLabel = JOB_TYPE_LABELS[agreement.type as JobType] ?? 'Inspection';
+  const fieldAssigned = Boolean(assignInspectorId);
 
   const job = await prisma.$transaction(async (tx) => {
     const property = await tx.property.create({
@@ -56,13 +78,26 @@ export async function createJobFromAgreement(
         jobNumber,
         title: `${typeLabel} — ${propertyData.addressLine1}`,
         type: agreement.type,
-        status: JobStatus.PENDING_ASSIGNMENT,
+        status: fieldAssigned ? JobStatus.ACCEPTED : JobStatus.PENDING_ASSIGNMENT,
         propertyId: property.id,
         clientContactId: agreement.clientContactId,
         priceCents: agreement.priceCents,
         createdById,
+        ...(fieldAssigned ? { assignedInspectorId: assignInspectorId } : {}),
       },
     });
+
+    if (fieldAssigned && assignInspectorId) {
+      await tx.jobAssignment.create({
+        data: {
+          jobId: created.id,
+          inspectorId: assignInspectorId,
+          assignedById: createdById,
+          status: AssignmentStatus.ACCEPTED,
+          respondedAt: new Date(),
+        },
+      });
+    }
 
     await tx.agreement.update({
       where: { id: agreementId },

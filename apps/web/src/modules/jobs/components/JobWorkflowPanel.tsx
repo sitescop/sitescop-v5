@@ -6,6 +6,7 @@ import {
   INVOICE_STATUS_LABELS,
   InvoiceStatus,
   JOB_STATUS_LABELS,
+  JobContractSource,
   JobStatus,
   PaymentMethod,
   PAYMENT_METHOD_LABELS,
@@ -82,11 +83,31 @@ export function JobWorkflowPanel({
   const invoice = billing.activeInvoice;
   const invoiceId = billing.pendingInvoiceId ?? billing.paidInvoiceId;
 
+  const isManualPaper = job.contractSource === JobContractSource.MANUAL_PAPER;
+  const inspectionReady = isManualPaper || billing.readyForInspection;
+
   const agreementDone = billing.agreementSigned;
   const paymentDone = billing.invoicePaid;
   const assignDone = Boolean(job.assignedInspector);
-  const inspectDone = job.status === JobStatus.COMPLETED;
+  const inspectDone = job.status === JobStatus.COMPLETED && Boolean(inspection);
   const inspectionStarted = Boolean(inspection) || job.status === JobStatus.IN_PROGRESS;
+  const inspectionCompleted = inspection?.status === 'COMPLETED';
+  const completedWithoutInspection = job.status === JobStatus.COMPLETED && !inspection;
+  const canStartInspection =
+    canManageInspection &&
+    inspectionReady &&
+    !inspection &&
+    (job.status === JobStatus.ACCEPTED ||
+      job.status === JobStatus.IN_PROGRESS ||
+      completedWithoutInspection);
+  const canOpenInspectionReport =
+    canManageInspection &&
+    Boolean(inspection) &&
+    (inspectionReady ||
+      isManualPaper ||
+      job.status === JobStatus.COMPLETED ||
+      job.status === JobStatus.ARCHIVED ||
+      Boolean(job.archivedAt));
 
   const sendAgreementMutation = useMutation({
     mutationFn: () => jobsApi.sendAgreement(job.id),
@@ -117,12 +138,16 @@ export function JobWorkflowPanel({
       }),
     onSuccess: () => {
       setPayOpen(false);
-      setMessage('Payment recorded. You can now assign an inspector.');
+      setMessage(
+        assignDone && isAssignedInspector
+          ? 'Payment recorded. You can start the inspection below.'
+          : 'Payment recorded. You can now assign an inspector.',
+      );
       onRefresh();
     },
   });
 
-  const steps = [
+  const digitalSteps = [
     {
       id: 'agreement',
       title: 'Client agreement',
@@ -149,40 +174,71 @@ export function JobWorkflowPanel({
       id: 'assign',
       title: 'Assign inspector',
       description: assignDone
-        ? job.assignedInspector?.displayName ?? 'Assigned'
+        ? isAssignedInspector
+          ? 'Assigned to you — ready when payment is recorded.'
+          : (job.assignedInspector?.displayName ?? 'Assigned')
         : billing.readyForInspection
           ? 'Choose who will perform the inspection.'
           : 'Available after agreement signed and payment received.',
-      state: stepState(assignDone, billing.readyForInspection && !assignDone),
+      state: stepState(assignDone, inspectionReady && !assignDone),
     },
     {
       id: 'inspect',
       title: 'Inspection',
       description: inspectDone
         ? 'Inspection complete'
-        : inspectionStarted
-          ? 'Continue the on-site inspection form.'
-          : job.status === JobStatus.ASSIGNED
-            ? 'Inspector must accept the job first.'
-            : 'Start the inspection when the inspector is ready.',
+        : completedWithoutInspection
+          ? 'This job was marked complete before the inspection started. Start the inspection below.'
+          : inspectionStarted
+            ? 'Continue the on-site inspection form.'
+            : job.status === JobStatus.ASSIGNED
+              ? 'Inspector must accept the job first.'
+              : 'Start the inspection when the inspector is ready.',
       state: stepState(
         inspectDone,
-        assignDone && !inspectionStarted && !inspectDone,
+        (assignDone && !inspectionStarted && !inspectDone) || completedWithoutInspection,
       ),
     },
     {
       id: 'complete',
       title: 'Job complete',
-      description: inspectDone ? JOB_STATUS_LABELS[job.status] : 'Mark complete when the report is finished.',
+      description: inspectDone
+        ? JOB_STATUS_LABELS[job.status]
+        : 'Finish the inspection report — the job completes automatically when you click Complete Inspection.',
       state: stepState(inspectDone, inspectionStarted && !inspectDone),
     },
   ];
+
+  const manualSteps = [
+    {
+      id: 'inspect',
+      title: 'Inspection report',
+      description: inspectDone
+        ? 'Report complete'
+        : isManualPaper
+          ? 'Paper contract on file — draft the inspection report.'
+          : 'Start the inspection report.',
+      state: stepState(inspectDone, !inspectDone),
+    },
+    {
+      id: 'complete',
+      title: 'Job complete',
+      description: inspectDone
+        ? JOB_STATUS_LABELS[job.status]
+        : 'Click Complete Inspection on the report when finished.',
+      state: stepState(inspectDone, inspectionStarted && !inspectDone),
+    },
+  ];
+
+  const steps = isManualPaper ? manualSteps : digitalSteps;
 
   return (
     <div className="rounded-sm border border-border bg-surface p-5">
       <h3 className="mb-1 text-lg font-semibold text-text">Job workflow</h3>
       <p className="mb-5 text-sm text-text-light">
-        Follow these steps in order — each step unlocks the next.
+        {isManualPaper
+          ? 'Paper contract — no online agreement or payment required. Draft the report and complete.'
+          : 'Follow these steps in order — each step unlocks the next.'}
       </p>
 
       {message && (
@@ -252,7 +308,7 @@ export function JobWorkflowPanel({
                 </div>
               )}
 
-              {step.id === 'assign' && billing.readyForInspection && !assignDone && canAssign && (
+              {step.id === 'assign' && inspectionReady && !assignDone && canAssign && (
                 <div className="mt-2">
                   <Button size="sm" onClick={onAssignClick}>
                     Assign Inspector
@@ -271,32 +327,34 @@ export function JobWorkflowPanel({
                 </div>
               )}
 
-              {step.id === 'inspect' &&
-                canManageInspection &&
-                billing.readyForInspection &&
-                [JobStatus.ACCEPTED, JobStatus.IN_PROGRESS].includes(job.status) && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {inspection ? (
-                      <Button size="sm" variant="accent" asChild>
-                        <Link to={`/inspections/${inspection.id}`}>
-                          {inspection.status === 'COMPLETED' ? 'Open Report' : 'Continue Inspection'}
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button size="sm" onClick={onStartInspection} isLoading={isStartingInspection}>
-                        Start Inspection
-                      </Button>
-                    )}
-                  </div>
-                )}
+              {step.id === 'inspect' && (canStartInspection || canOpenInspectionReport) && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {inspection ? (
+                    <Button size="sm" variant="accent" asChild>
+                      <Link to={`/inspections/${inspection.id}`}>
+                        {inspectionCompleted ? 'Edit Inspection Report' : 'Continue Inspection'}
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={onStartInspection} isLoading={isStartingInspection}>
+                      Start Inspection
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {step.id === 'complete' &&
                 canComplete &&
-                isAssignedInspector &&
-                [JobStatus.ACCEPTED, JobStatus.IN_PROGRESS].includes(job.status) && (
+                !isAssignedInspector &&
+                canAssign &&
+                [JobStatus.ACCEPTED, JobStatus.IN_PROGRESS].includes(job.status) &&
+                !inspection && (
                   <div className="mt-2">
+                    <p className="mb-2 text-xs text-text-muted">
+                      Office use only — inspectors must complete the inspection report instead.
+                    </p>
                     <Button size="sm" variant="accent" onClick={onCompleteJob} isLoading={isCompleting}>
-                      Mark Job Complete
+                      Mark Job Complete (no report)
                     </Button>
                   </div>
                 )}

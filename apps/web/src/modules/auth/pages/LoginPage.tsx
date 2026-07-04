@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from '@/lib/api-client';
 import { useAuthStore } from '@/modules/auth/store/auth-store';
+import { getPostLoginPath } from '@/modules/auth/components/HomeRedirect';
 import { Button } from '@/design-system/components/Button';
 import { Input } from '@/design-system/components/Input';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/design-system/components/Card';
@@ -11,6 +12,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const login = useAuthStore((s) => s.login);
+  const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const loadSession = useAuthStore((s) => s.loadSession);
@@ -20,7 +22,7 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const from = (location.state as { from?: string } | null)?.from ?? '/dashboard';
+  const from = (location.state as { from?: string } | null)?.from;
 
   useEffect(() => {
     void loadSession();
@@ -31,7 +33,8 @@ export function LoginPage() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to={from} replace />;
+    const destination = from ?? (user ? getPostLoginPath(user.role) : '/dashboard');
+    return <Navigate to={destination} replace />;
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -41,7 +44,8 @@ export function LoginPage() {
 
     try {
       await login(email.trim(), password);
-      navigate(from, { replace: true });
+      const user = useAuthStore.getState().user;
+      navigate(from ?? (user ? getPostLoginPath(user.role) : '/dashboard'), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -109,7 +113,7 @@ export function LoginPage() {
         </Card>
 
         <p className="mt-6 text-center text-xs text-text-muted">
-          Demo: admin@sitescop-demo.com.au / SiteScop2026!
+          Demo: admin@sitescop-demo.com.au or client@sitescop-demo.com.au / SiteScop2026!
         </p>
       </div>
     </div>

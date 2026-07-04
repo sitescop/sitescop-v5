@@ -53,7 +53,7 @@ export const agreementsApi = {
       { method: 'POST' },
     ),
   sign: (token: string, body: import('@sitescop/shared-types').SignAgreementRequest) =>
-    apiRequest<{ success: true; agreementNumber: string }>(
+    apiRequest<import('@sitescop/shared-types').SignAgreementResponse>(
       `/api/v1/agreements/public/${token}/sign`,
       { method: 'POST', body },
     ),

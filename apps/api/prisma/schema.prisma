@@ -44,6 +44,11 @@ enum JobType {
   OTHER
 }
 
+enum JobContractSource {
+  DIGITAL
+  MANUAL_PAPER
+}
+
 enum AssignmentStatus {
   PENDING
   ACCEPTED
@@ -154,6 +159,7 @@ model Company {
   invoices    Invoice[]
   notifications Notification[]
   emailMessages EmailMessage[]
+  smsMessages   SmsMessage[]
   settings    CompanySettings?
   apiKeys     ApiKey[]
 
@@ -291,8 +297,9 @@ model Job {
   jobNumber            String
   title                String
   description          String?
-  type                 JobType    @default(BUILDING)
-  status               JobStatus  @default(DRAFT)
+  type                 JobType            @default(BUILDING)
+  contractSource       JobContractSource  @default(DIGITAL)
+  status               JobStatus          @default(DRAFT)
   propertyId           String?
   property             Property?  @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   clientContactId      String?
@@ -518,6 +525,24 @@ model EmailMessage {
   @@index([status])
   @@index([createdAt])
   @@map("email_messages")
+}
+
+model SmsMessage {
+  id           String              @id @default(cuid())
+  companyId    String
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  toPhone      String
+  templateKey  String?
+  status       EmailDeliveryStatus @default(PENDING)
+  errorMessage String?
+  sentAt       DateTime?
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+
+  @@index([companyId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sms_messages")
 }
 
 model Inspection {

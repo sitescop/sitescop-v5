@@ -8,6 +8,7 @@ import {
   cancelJob,
   completeJob,
   createJob,
+  createManualJob,
   declineJob,
   getJob,
   listInspectors,
@@ -72,6 +73,19 @@ export async function registerJobsRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       try {
         const job = await createJob(request.authUser!, request.body as never, request);
+        return reply.status(201).send({ job });
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/api/v1/jobs/manual',
+    { preHandler: [...auth, requirePermission('jobs:create_manual')] },
+    async (request, reply) => {
+      try {
+        const job = await createManualJob(request.authUser!, request.body as never, request);
         return reply.status(201).send({ job });
       } catch (error) {
         return handleRouteError(error, request, reply);

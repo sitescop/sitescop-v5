@@ -126,7 +126,7 @@ export function BuildingInspectionForm({
       />
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Job Information</h3>
+        <h3 className="inspection-section-heading">Job Information</h3>
         <div className="grid gap-4 md:grid-cols-2">
           <Select label="Client Type" value={j.clientType} onChange={(e) => patchShared('jobInformation', { clientType: e.target.value })} options={CLIENT_TYPES.map((v) => ({ value: v, label: v }))} />
           {j.clientType === 'Agent' && (
@@ -176,7 +176,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Services</h3>
+        <h3 className="inspection-section-heading">Services</h3>
         <CheckboxGroupField disabled={disabled} label="Water Supply" options={WATER_SUPPLY_OPTIONS} value={s.waterSupply} onChange={(v) => patchShared('services', { waterSupply: v })} />
         <Input label="Water Supply Other" value={s.waterSupplyOther} onChange={(e) => patchShared('services', { waterSupplyOther: e.target.value })} />
         <CheckboxGroupField disabled={disabled} label="Sewer" options={SEWER_OPTIONS} value={s.sewer} onChange={(v) => patchShared('services', { sewer: v })} />
@@ -202,7 +202,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Property Description</h3>
+        <h3 className="inspection-section-heading">Property Description</h3>
         <div className="grid gap-4 md:grid-cols-2">
           <Select
             label="Property Type"
@@ -258,7 +258,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Accessibility & Risk Assessment</h3>
+        <h3 className="inspection-section-heading">Accessibility & Risk Assessment</h3>
         <p className="text-sm text-text-muted">
           Record obstructions and inaccessible areas first. Undetected Structural Damage Risk defaults to Moderate and increases automatically when limitations are present — for example a dog, locked rooms, stored goods, or unsafe access.
         </p>
@@ -289,7 +289,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Site Conditions</h3>
+        <h3 className="inspection-section-heading">Site Conditions</h3>
         <div className="grid gap-4 md:grid-cols-3">
           <RatingSelect label="Land Slope" value={formData.shared.siteConditions.landSlope} onChange={(v) => patchShared('siteConditions', { landSlope: v })} options={LAND_SLOPE} />
           <RatingSelect label="Surface Drainage" value={formData.shared.siteConditions.surfaceDrainage} onChange={(v) => patchShared('siteConditions', { surfaceDrainage: v })} options={DRAINAGE_RATING} />
@@ -300,21 +300,21 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">External</h3>
+        <h3 className="inspection-section-heading">External</h3>
         <CheckboxGroupField disabled={disabled} label="External Defects" options={EXTERNAL_DEFECTS} value={formData.shared.external.externalDefects} onChange={(v) => patchShared('external', { externalDefects: v })} />
         <CheckboxGroupField disabled={disabled} label="Damage Observed" options={DAMAGE_OBSERVED} value={formData.shared.external.damageObserved} onChange={(v) => patchShared('external', { damageObserved: v })} />
         <SectionComments disabled={disabled} comments={formData.shared.external.comments} photos={formData.shared.external.photos} onCommentsChange={(v) => patchShared('external', { comments: v })} onPhotosChange={(v) => patchShared('external', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Roof Exterior</h3>
+        <h3 className="inspection-section-heading">Roof Exterior</h3>
         <CheckboxGroupField disabled={disabled} label="Defects" options={ROOF_EXTERIOR_DEFECTS} value={formData.shared.roofExterior.defects} onChange={(v) => patchShared('roofExterior', { defects: v })} />
         <RatingSelect label="Condition" value={formData.shared.roofExterior.condition} onChange={(v) => patchShared('roofExterior', { condition: v })} options={['Good', 'Fair', 'Poor']} />
         <SectionComments disabled={disabled} comments={formData.shared.roofExterior.comments} photos={formData.shared.roofExterior.photos} onCommentsChange={(v) => patchShared('roofExterior', { comments: v })} onPhotosChange={(v) => patchShared('roofExterior', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Roof Space</h3>
+        <h3 className="inspection-section-heading">Roof Space</h3>
         <CheckboxGroupField disabled={disabled} label="Defects" options={ROOF_SPACE_DEFECTS} value={formData.shared.roofSpace.defects} onChange={(v) => patchShared('roofSpace', { defects: v })} />
         <SectionComments disabled={disabled} comments={formData.shared.roofSpace.comments} photos={formData.shared.roofSpace.photos} onCommentsChange={(v) => patchShared('roofSpace', { comments: v })} onPhotosChange={(v) => patchShared('roofSpace', { photos: v })} />
       </section>
@@ -324,7 +324,7 @@ export function BuildingInspectionForm({
       {showBuilding && building && (
         <>
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Kitchen</h3>
+        <h3 className="inspection-section-heading">Kitchen</h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[
             ['cabinetDoorsOperating', 'Cabinet Doors Operating', ['Yes', 'No']],
@@ -382,7 +382,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Laundry</h3>
+        <h3 className="inspection-section-heading">Laundry</h3>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[
             ['cabinetDamage', 'Cabinet Damage', ['No', 'Yes']],
@@ -464,7 +464,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">General Electrical Disclaimer</h3>
+        <h3 className="inspection-section-heading">General Electrical Disclaimer</h3>
         <div className="space-y-2 rounded-sm border border-border bg-background p-4 text-sm text-text-muted">
           {GENERAL_ELECTRICAL_DISCLAIMERS.map((statement) => (
             <p key={statement}>{statement}</p>
@@ -479,38 +479,38 @@ export function BuildingInspectionForm({
       {roomSections}
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Subfloor</h3>
+        <h3 className="inspection-section-heading">Subfloor</h3>
         <CheckboxGroupField disabled={disabled} label="Elements" options={SUBFLOOR_ELEMENTS} value={building.subfloor.elements} onChange={(v) => patchBuilding('subfloor', { elements: v })} />
         <SectionComments disabled={disabled} comments={building.subfloor.comments} photos={building.subfloor.photos} onCommentsChange={(v) => patchBuilding('subfloor', { comments: v })} onPhotosChange={(v) => patchBuilding('subfloor', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Fencing</h3>
+        <h3 className="inspection-section-heading">Fencing</h3>
         <CheckboxGroupField disabled={disabled} label="Materials" options={FENCING_MATERIALS} value={building.fencing.materials} onChange={(v) => patchBuilding('fencing', { materials: v })} />
         <SectionComments disabled={disabled} comments={building.fencing.comments} photos={building.fencing.photos} onCommentsChange={(v) => patchBuilding('fencing', { comments: v })} onPhotosChange={(v) => patchBuilding('fencing', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Outbuildings</h3>
+        <h3 className="inspection-section-heading">Outbuildings</h3>
         <CheckboxGroupField disabled={disabled} label="Types" options={OUTBUILDING_TYPES} value={building.outbuildings.types} onChange={(v) => patchBuilding('outbuildings', { types: v })} />
         <RatingSelect label="Condition" value={building.outbuildings.condition} onChange={(v) => patchBuilding('outbuildings', { condition: v })} options={['Good', 'Fair', 'Poor']} />
         <SectionComments disabled={disabled} comments={building.outbuildings.comments} photos={building.outbuildings.photos} onCommentsChange={(v) => patchBuilding('outbuildings', { comments: v })} onPhotosChange={(v) => patchBuilding('outbuildings', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Corrosion</h3>
+        <h3 className="inspection-section-heading">Corrosion</h3>
         <CheckboxGroupField disabled={disabled} label="Items" options={CORROSION_ITEMS} value={building.corrosion.items} onChange={(v) => patchBuilding('corrosion', { items: v })} />
         <SectionComments disabled={disabled} comments={building.corrosion.comments} photos={building.corrosion.photos} onCommentsChange={(v) => patchBuilding('corrosion', { comments: v })} onPhotosChange={(v) => patchBuilding('corrosion', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Minor Defects</h3>
+        <h3 className="inspection-section-heading">Minor Defects</h3>
         <CheckboxGroupField disabled={disabled} label="Checklist" options={MINOR_DEFECT_PRESETS} value={building.minorDefects.checklist} onChange={(v) => patchBuilding('minorDefects', { checklist: v })} />
         <SectionComments disabled={disabled} comments={building.minorDefects.comments} photos={building.minorDefects.photos} onCommentsChange={(v) => patchBuilding('minorDefects', { comments: v })} onPhotosChange={(v) => patchBuilding('minorDefects', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Major Defects</h3>
+        <h3 className="inspection-section-heading">Major Defects</h3>
         <CheckboxGroupField disabled={disabled} label="Structural Movement" options={STRUCTURAL_MOVEMENT} value={building.majorDefects.structuralMovement} onChange={(v) => patchBuilding('majorDefects', { structuralMovement: v })} />
         <YesNoSelect label="Engineering Inspection Required" value={building.majorDefects.structuralEngineeringRequired} onChange={(v) => patchBuilding('majorDefects', { structuralEngineeringRequired: v })} />
         <CheckboxGroupField disabled={disabled} label="Deformation / Sagging" options={DEFORMATION_ITEMS} value={building.majorDefects.deformation} onChange={(v) => patchBuilding('majorDefects', { deformation: v })} />
@@ -519,12 +519,12 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Thermal Imaging</h3>
+        <h3 className="inspection-section-heading">Thermal Imaging</h3>
         <SectionComments disabled={disabled} comments={building.thermalImaging.comments} photos={building.thermalImaging.photos} onCommentsChange={(v) => patchBuilding('thermalImaging', { comments: v })} onPhotosChange={(v) => patchBuilding('thermalImaging', { photos: v })} />
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Moisture Testing</h3>
+        <h3 className="inspection-section-heading">Moisture Testing</h3>
         <YesNoSelect label="Visual Moisture Evidence" value={building.moistureTesting.visualMoistureEvidence} onChange={(v) => patchBuilding('moistureTesting', { visualMoistureEvidence: v })} />
         <CheckboxGroupField disabled={disabled} label="Visual Locations" options={['Bathroom', 'Kitchen', 'Laundry', 'External', 'Roof Space']} value={building.moistureTesting.visualLocations} onChange={(v) => patchBuilding('moistureTesting', { visualLocations: v })} />
         <YesNoSelect label="Excessive Moisture Evidence" value={building.moistureTesting.excessiveMoistureEvidence} onChange={(v) => patchBuilding('moistureTesting', { excessiveMoistureEvidence: v })} />
@@ -534,7 +534,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Conclusion</h3>
+        <h3 className="inspection-section-heading">Conclusion</h3>
         <div className="grid gap-4 md:grid-cols-2">
           <RatingSelect label="Structural Damage Rating" value={building.conclusion.structuralDamageRating} onChange={(v) => patchBuilding('conclusion', { structuralDamageRating: v })} options={CONCLUSION_RATINGS} />
           <RatingSelect label="Conditions Conducive Rating" value={building.conclusion.conditionsConduciveRating} onChange={(v) => patchBuilding('conclusion', { conditionsConduciveRating: v })} options={CONCLUSION_RATINGS} />
@@ -547,7 +547,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Recommendations</h3>
+        <h3 className="inspection-section-heading">Recommendations</h3>
         <div className="rounded-sm bg-background p-3 text-sm">
           <p className="inspection-subsection-heading">Auto Recommendations</p>
           <ul className="list-disc pl-5">
@@ -566,7 +566,7 @@ export function BuildingInspectionForm({
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Inspector Declaration</h3>
+        <h3 className="inspection-section-heading">Inspector Declaration</h3>
         <div className="grid gap-4 md:grid-cols-2">
           <Input label="Inspector Name" value={building.inspectorDeclaration.inspectorName} onChange={(e) => patchBuilding('inspectorDeclaration', { inspectorName: e.target.value })} />
           <Input label="Licence Number" value={building.inspectorDeclaration.licenceNumber} onChange={(e) => patchBuilding('inspectorDeclaration', { licenceNumber: e.target.value })} />

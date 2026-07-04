@@ -31,6 +31,7 @@ import { hashPassword, hashToken } from '../src/shared/auth/crypto.js';
 const prisma = new PrismaClient();
 
 const DEFAULT_PASSWORD = 'SiteScop2026!';
+const CLIENT_DEMO_EMAIL = 'client@sitescop-demo.com.au';
 
 interface SeedUser {
   email: string;
@@ -143,7 +144,10 @@ async function main() {
         jobCompleted: 'Job {{jobNumber}} has been completed.',
       },
       smsTemplates: {
-        jobReminder: 'Reminder: inspection {{jobNumber}} scheduled for {{date}}.',
+        agreementSent: 'Hi {{clientName}}, sign your agreement: {{signingUrl}}',
+        invoiceSent: 'Invoice {{invoiceNumber}} for {{totalAmount}} due {{dueDate}}.',
+        reportReady: 'Your report for {{propertyAddress}} is ready in your client portal.',
+        jobReminder: 'Reminder: inspection {{jobNumber}} on {{scheduledDate}} at {{propertyAddress}}.',
       },
     },
   });
@@ -176,7 +180,9 @@ async function main() {
 
   const clientContact = await prisma.contact.upsert({
     where: { id: 'seed-client-contact' },
-    update: {},
+    update: {
+      email: CLIENT_DEMO_EMAIL,
+    },
     create: {
       id: 'seed-client-contact',
       companyId: company.id,
@@ -184,7 +190,7 @@ async function main() {
       status: ContactStatus.ACTIVE,
       firstName: 'Sarah',
       lastName: 'Mitchell',
-      email: 'sarah.mitchell@example.com',
+      email: CLIENT_DEMO_EMAIL,
       phone: '0412 345 678',
       address: '45 Ocean Street, Bondi NSW 2026',
     },
@@ -293,6 +299,8 @@ async function main() {
       signatureName: 'Sarah Mitchell',
       signatureData: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iNjAiPjx0ZXh0IHg9IjEwIiB5PSI0MCIgZm9udC1zaXplPSIzMCI+Uy4gTWl0Y2hlbGw8L3RleHQ+PC9zdmc+',
       declarationsAccepted: true,
+      clientEmail: CLIENT_DEMO_EMAIL,
+      clientContactId: clientContact.id,
     },
     create: {
       id: 'seed-agreement-1',
@@ -303,7 +311,7 @@ async function main() {
       type: JobType.PRE_PURCHASE,
       clientContactId: clientContact.id,
       clientName: 'Sarah Mitchell',
-      clientEmail: 'sarah.mitchell@example.com',
+      clientEmail: CLIENT_DEMO_EMAIL,
       clientPhone: '0412 345 678',
       propertyAddress: '45 Ocean Street, Bondi NSW 2026',
       priceCents: 45000,
@@ -325,6 +333,8 @@ async function main() {
       paidAt: new Date(),
       paymentMethod: PaymentMethod.BANK_TRANSFER,
       paymentReference: 'SEED-PAY-001',
+      clientEmail: CLIENT_DEMO_EMAIL,
+      clientContactId: clientContact.id,
     },
     create: {
       id: 'seed-invoice-1',
@@ -335,7 +345,7 @@ async function main() {
       agreementId: 'seed-agreement-1',
       clientContactId: clientContact.id,
       clientName: 'Sarah Mitchell',
-      clientEmail: 'sarah.mitchell@example.com',
+      clientEmail: CLIENT_DEMO_EMAIL,
       propertyAddress: '45 Ocean Street, Bondi NSW 2026',
       description: 'Pre-Purchase Building Inspection',
       subtotalCents: 45000,
@@ -348,6 +358,47 @@ async function main() {
     },
   });
 
+  const invoice2Number = `INV-${year}-0002`;
+  const existingInvoice2 = await prisma.invoice.findFirst({
+    where: {
+      OR: [{ id: 'seed-invoice-2' }, { companyId: company.id, invoiceNumber: invoice2Number }],
+    },
+  });
+  const invoice2Fields = {
+    status: InvoiceStatus.SENT,
+    sentAt: new Date(),
+    paidAt: null,
+    paymentMethod: null,
+    paymentReference: null,
+    clientEmail: CLIENT_DEMO_EMAIL,
+    clientContactId: clientContact.id,
+    clientName: 'Sarah Mitchell',
+    propertyAddress: 'Address to be confirmed',
+    description: 'Pest Inspection',
+    subtotalCents: 35000,
+    gstCents: 3500,
+    totalCents: 38500,
+    dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    jobId: 'seed-job-2',
+    agreementId: 'seed-agreement-2',
+  };
+  if (existingInvoice2) {
+    await prisma.invoice.update({
+      where: { id: existingInvoice2.id },
+      data: invoice2Fields,
+    });
+  } else {
+    await prisma.invoice.create({
+      data: {
+        id: 'seed-invoice-2',
+        companyId: company.id,
+        invoiceNumber: invoice2Number,
+        createdById: adminId,
+        ...invoice2Fields,
+      },
+    });
+  }
+
   const demoSigningToken = 'demo-agreement-2-signing-token';
   const tokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
@@ -357,6 +408,8 @@ async function main() {
       accessTokenHash: hashToken(demoSigningToken),
       accessTokenExpiresAt: tokenExpiresAt,
       expiresAt: tokenExpiresAt,
+      clientEmail: CLIENT_DEMO_EMAIL,
+      clientContactId: clientContact.id,
     },
     create: {
       id: 'seed-agreement-2',
@@ -367,7 +420,7 @@ async function main() {
       type: JobType.PEST,
       clientContactId: clientContact.id,
       clientName: 'Sarah Mitchell',
-      clientEmail: 'sarah.mitchell@example.com',
+      clientEmail: CLIENT_DEMO_EMAIL,
       propertyAddress: 'Address to be confirmed',
       priceCents: 35000,
       gstCents: 3500,
@@ -385,7 +438,7 @@ async function main() {
     createEmptyInspectionFormData('BUILDING', {
       jobNumber: `JOB-${year}-0001`,
       clientName: 'Sarah Mitchell',
-      clientEmail: 'sarah.mitchell@example.com',
+      clientEmail: CLIENT_DEMO_EMAIL,
       clientPhone: '0412 345 678',
       agentName: 'James Agent',
       agentPhone: '0400 111 222',
@@ -448,6 +501,28 @@ async function main() {
         })),
       },
     },
+  });
+
+  // Portal matches agreements/invoices by client login email — always sync demo records.
+  await prisma.agreement.updateMany({
+    where: {
+      companyId: company.id,
+      OR: [
+        { id: { in: ['seed-agreement-1', 'seed-agreement-2'] } },
+        { clientEmail: { contains: 'sarah.mitchell', mode: 'insensitive' } },
+      ],
+    },
+    data: { clientEmail: CLIENT_DEMO_EMAIL, clientContactId: clientContact.id },
+  });
+  await prisma.invoice.updateMany({
+    where: {
+      companyId: company.id,
+      OR: [
+        { invoiceNumber: { in: [`INV-${year}-0001`, invoice2Number] } },
+        { clientEmail: { contains: 'sarah.mitchell', mode: 'insensitive' } },
+      ],
+    },
+    data: { clientEmail: CLIENT_DEMO_EMAIL, clientContactId: clientContact.id },
   });
 
   console.log('Seed complete.');

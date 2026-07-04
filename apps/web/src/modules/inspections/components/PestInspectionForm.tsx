@@ -60,7 +60,7 @@ export function PestInspectionForm({ pest, onSectionChange, readOnly }: PestInsp
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">Section D — Significant Items</h3>
+        <h3 className="inspection-section-heading">Section D — Significant Items</h3>
         <InspectionSubsectionHeading as="h4">Risk Assessment</InspectionSubsectionHeading>
         <p className="text-sm text-text-muted">
           Risk level defaults to Low and updates from accessibility obstructions recorded above. The assessment text below is generated automatically and can be edited.
@@ -252,7 +252,7 @@ export function PestInspectionForm({ pest, onSectionChange, readOnly }: PestInsp
       </section>
 
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-text">{PEST_INSPECTION_SECTION_LABELS.pestConclusion}</h3>
+        <h3 className="inspection-section-heading">{PEST_INSPECTION_SECTION_LABELS.pestConclusion}</h3>
         <Textarea
           label="Conclusion"
           value={pest.pestConclusion.autoConclusion}

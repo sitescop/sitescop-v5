@@ -7,6 +7,7 @@ import {
   type Prisma,
 } from '@prisma/client';
 import type { AuthUser } from '@sitescop/shared-types';
+import { roleHasPermission } from '@sitescop/shared-types';
 import {
   formatAudCents,
   INVOICE_STATUS_LABELS,
@@ -26,10 +27,11 @@ import { generateInvoicePdf } from '@sitescop/report-pdf';
 import { z } from 'zod';
 import { createAuditLog } from '../../shared/audit/audit.service.js';
 import { advanceJobAfterBillingComplete } from '../../shared/billing/job-billing-readiness.js';
-import { createJobFromAgreement } from '../../shared/billing/create-job-from-agreement.js';
+import { createJobFromAgreement, resolveInspectorAssigneeFromAgreement } from '../../shared/billing/create-job-from-agreement.js';
 import { resolveCompanyProfileForReport } from '../../shared/branding/resolve-company-profile.js';
 import { resolveCompanyLogoForPdf } from '../../shared/branding/resolve-company-logo.js';
 import { loadCompanyEmailContext, sendCompanyEmail } from '../../shared/email/email.service.js';
+import { notifyClientSms } from '../../shared/sms/notify-client.js';
 import { AppError, ForbiddenError, NotFoundError } from '../../shared/http/errors.js';
 import { parsePagination } from '../../shared/http/validation.js';
 import { resolveCompanyScope } from '../../shared/scoping/company-scope.js';
@@ -59,8 +61,8 @@ export const markPaidSchema = z.object({
 });
 
 const invoiceInclude = {
-  job: { select: { jobNumber: true, type: true } },
-  agreement: { select: { agreementNumber: true } },
+  job: { select: { jobNumber: true, type: true, assignedInspectorId: true } },
+  agreement: { select: { agreementNumber: true, createdById: true, job: { select: { assignedInspectorId: true } } } },
   createdBy: { select: { firstName: true, lastName: true } },
 } satisfies Prisma.InvoiceInclude;
 
@@ -88,7 +90,7 @@ async function generateInvoiceNumber(companyId: string): Promise<string> {
   return `${prefix}${String(next).padStart(4, '0')}`;
 }
 
-function mapSummary(row: InvoiceRow): InvoiceSummary {
+export function mapInvoiceSummary(row: InvoiceRow): InvoiceSummary {
   return {
     id: row.id,
     invoiceNumber: row.invoiceNumber,
@@ -115,7 +117,7 @@ function mapSummary(row: InvoiceRow): InvoiceSummary {
 
 function mapDetail(row: InvoiceRow): InvoiceDetail {
   return {
-    ...mapSummary(row),
+    ...mapInvoiceSummary(row),
     clientContactId: row.clientContactId,
     paymentMethod: row.paymentMethod as InvoiceDetail['paymentMethod'],
     paymentReference: row.paymentReference,
@@ -131,6 +133,20 @@ async function getInvoiceOrThrow(id: string, companyId?: string): Promise<Invoic
   });
   if (!row) throw new NotFoundError('Invoice not found');
   return row;
+}
+
+function assertCanMarkInvoicePaid(user: AuthUser, invoice: InvoiceRow): void {
+  if (roleHasPermission(user.role, 'billing:manage')) return;
+
+  if (!roleHasPermission(user.role, 'invoices:mark_paid')) {
+    throw new ForbiddenError('Permission denied');
+  }
+
+  if (invoice.job?.assignedInspectorId === user.id) return;
+  if (invoice.agreement?.createdById === user.id) return;
+  if (invoice.agreement?.job?.assignedInspectorId === user.id) return;
+
+  throw new ForbiddenError('You can only mark payment for your own jobs or agreements');
 }
 
 async function buildInvoicePdfBuffer(row: InvoiceRow): Promise<Buffer> {
@@ -209,7 +225,7 @@ export async function listInvoices(
     prisma.invoice.count({ where }),
   ]);
 
-  return { invoices: rows.map(mapSummary), total, page, pageSize };
+  return { invoices: rows.map(mapInvoiceSummary), total, page, pageSize };
 }
 
 export async function getInvoice(user: AuthUser, id: string): Promise<InvoiceDetail> {
@@ -437,39 +453,31 @@ export async function sendInvoice(
     entityId: row.id,
   });
 
+  void notifyClientSms(
+    row.companyId,
+    { contactId: row.clientContactId },
+    'invoiceSent',
+    {
+      clientName: row.clientName,
+      invoiceNumber: row.invoiceNumber,
+      totalAmount: formatAudCents(row.totalCents),
+      dueDate: row.dueDate ? row.dueDate.toLocaleDateString('en-AU') : 'On receipt',
+      companyName: company.name,
+      companyPhone: company.phone ?? '',
+    },
+  );
+
   return { invoice: mapDetail(row), emailSent: true };
 }
 
-export async function markInvoicePaid(
+async function onInvoicePaid(
   user: AuthUser,
   id: string,
-  input: MarkInvoicePaidRequest,
+  row: InvoiceRow,
+  paymentMethod: PaymentMethod,
+  paymentReference: string | undefined,
   request?: import('fastify').FastifyRequest,
 ): Promise<InvoiceDetail> {
-  const data = markPaidSchema.parse(input);
-  const companyId = resolveCompanyScope(user);
-  const existing = await getInvoiceOrThrow(id, companyId);
-
-  if (existing.status === InvoiceStatus.PAID) {
-    throw new AppError('Invoice is already marked as paid', 'INVALID_STATE');
-  }
-  if (existing.status === InvoiceStatus.VOID) {
-    throw new AppError('Void invoices cannot be marked as paid', 'INVALID_STATE');
-  }
-
-  const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
-
-  const row = await prisma.invoice.update({
-    where: { id },
-    data: {
-      status: InvoiceStatus.PAID,
-      paidAt,
-      paymentMethod: data.paymentMethod,
-      paymentReference: data.paymentReference,
-    },
-    include: invoiceInclude,
-  });
-
   await createAuditLog({
     companyId: row.companyId,
     actorId: user.id,
@@ -477,8 +485,8 @@ export async function markInvoicePaid(
     entityType: 'Invoice',
     entityId: id,
     metadata: {
-      paymentMethod: data.paymentMethod,
-      paymentReference: data.paymentReference,
+      paymentMethod,
+      paymentReference,
     },
     request,
   });
@@ -487,7 +495,8 @@ export async function markInvoicePaid(
   if (jobId) {
     await advanceJobAfterBillingComplete(jobId, row.companyId);
   } else if (row.agreementId) {
-    jobId = await createJobFromAgreement(row.agreementId, row.companyId, user.id);
+    const assignInspectorId = await resolveInspectorAssigneeFromAgreement(row.agreementId, row.companyId);
+    jobId = await createJobFromAgreement(row.agreementId, row.companyId, user.id, assignInspectorId);
     await prisma.invoice.update({
       where: { id },
       data: { jobId },
@@ -527,7 +536,7 @@ export async function markInvoicePaid(
           invoiceNumber: row.invoiceNumber,
           clientName: row.clientName,
           totalAmount: formatAudCents(row.totalCents),
-          paymentReference: data.paymentReference ?? '—',
+          paymentReference: paymentReference ?? '—',
           jobNumber,
           companyName: company.name,
           companyPhone: company.phone ?? '',
@@ -539,6 +548,72 @@ export async function markInvoicePaid(
   }
 
   return mapDetail(row);
+}
+
+export async function markInvoicePaid(
+  user: AuthUser,
+  id: string,
+  input: MarkInvoicePaidRequest,
+  request?: import('fastify').FastifyRequest,
+): Promise<InvoiceDetail> {
+  const data = markPaidSchema.parse(input);
+  const companyId = resolveCompanyScope(user);
+  const existing = await getInvoiceOrThrow(id, companyId);
+  assertCanMarkInvoicePaid(user, existing);
+
+  if (existing.status === InvoiceStatus.PAID) {
+    throw new AppError('Invoice is already marked as paid', 'INVALID_STATE');
+  }
+  if (existing.status === InvoiceStatus.VOID) {
+    throw new AppError('Void invoices cannot be marked as paid', 'INVALID_STATE');
+  }
+
+  const paidAt = data.paidAt ? new Date(data.paidAt) : new Date();
+
+  const row = await prisma.invoice.update({
+    where: { id },
+    data: {
+      status: InvoiceStatus.PAID,
+      paidAt,
+      paymentMethod: data.paymentMethod,
+      paymentReference: data.paymentReference,
+    },
+    include: invoiceInclude,
+  });
+
+  return onInvoicePaid(user, id, row, data.paymentMethod, data.paymentReference, request);
+}
+
+export async function markInvoicePaidByStripe(
+  user: AuthUser,
+  invoiceId: string,
+  paymentReference: string,
+  request?: import('fastify').FastifyRequest,
+): Promise<{ invoice: InvoiceDetail; alreadyPaid: boolean }> {
+  const companyId = user.companyId;
+  if (!companyId) throw new ForbiddenError('Company context required');
+
+  const existing = await getInvoiceOrThrow(invoiceId, companyId);
+  if (existing.status === InvoiceStatus.PAID) {
+    return { invoice: mapDetail(existing), alreadyPaid: true };
+  }
+  if (existing.status === InvoiceStatus.VOID || existing.status === InvoiceStatus.DRAFT) {
+    throw new AppError('Invoice cannot be paid online', 'INVALID_STATE');
+  }
+
+  const row = await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: {
+      status: InvoiceStatus.PAID,
+      paidAt: new Date(),
+      paymentMethod: PaymentMethod.CARD,
+      paymentReference,
+    },
+    include: invoiceInclude,
+  });
+
+  const invoice = await onInvoicePaid(user, invoiceId, row, PaymentMethod.CARD, paymentReference, request);
+  return { invoice, alreadyPaid: false };
 }
 
 export async function voidInvoice(
@@ -573,7 +648,14 @@ export async function voidInvoice(
 
 export async function getInvoicePdfBuffer(user: AuthUser, id: string): Promise<{ buffer: Buffer; fileName: string }> {
   const companyId = resolveCompanyScope(user);
-  const row = await getInvoiceOrThrow(id, companyId);
+  return getInvoicePdfBufferForCompany(companyId!, id);
+}
+
+export async function getInvoicePdfBufferForCompany(
+  companyId: string,
+  invoiceId: string,
+): Promise<{ buffer: Buffer; fileName: string }> {
+  const row = await getInvoiceOrThrow(invoiceId, companyId);
   const buffer = await buildInvoicePdfBuffer(row);
   return { buffer, fileName: `${row.invoiceNumber}.pdf` };
 }
@@ -675,6 +757,20 @@ export async function trySendInvoiceForAgreement(
       entityType: 'Invoice',
       entityId: invoice.id,
     });
+
+    void notifyClientSms(
+      companyId,
+      { contactId: invoice.clientContactId },
+      'invoiceSent',
+      {
+        clientName: invoice.clientName,
+        invoiceNumber: invoice.invoiceNumber,
+        totalAmount: formatAudCents(invoice.totalCents),
+        dueDate: invoice.dueDate ? invoice.dueDate.toLocaleDateString('en-AU') : 'On receipt',
+        companyName: company.name,
+        companyPhone: company.phone ?? '',
+      },
+    );
 
     return true;
   } catch {

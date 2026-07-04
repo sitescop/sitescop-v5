@@ -68,3 +68,17 @@ export function requirePermission(permission: Permission) {
     request.authUser = user;
   };
 }
+
+export function requireAnyPermission(...permissions: Permission[]) {
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = request.authUser ?? (await authenticateRequest(request));
+    if (!user) {
+      return reply.status(401).send({ error: 'Authentication required', code: 'UNAUTHORIZED' });
+    }
+    const allowed = permissions.some((permission) => roleHasPermission(user.role, permission));
+    if (!allowed) {
+      return reply.status(403).send({ error: 'Permission denied', code: 'FORBIDDEN' });
+    }
+    request.authUser = user;
+  };
+}

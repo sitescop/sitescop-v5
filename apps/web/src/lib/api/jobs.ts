@@ -1,6 +1,7 @@
 import type {
   AssignJobRequest,
   CreateJobRequest,
+  CreateManualJobRequest,
   DeclineJobRequest,
   JobDetail,
   JobsListResponse,
@@ -17,6 +18,8 @@ export const jobsApi = {
   get: (id: string) => apiRequest<{ job: JobDetail }>(`/api/v1/jobs/${id}`),
   create: (body: CreateJobRequest) =>
     apiRequest<{ job: JobDetail }>('/api/v1/jobs', { method: 'POST', body }),
+  createManual: (body: CreateManualJobRequest) =>
+    apiRequest<{ job: JobDetail }>('/api/v1/jobs/manual', { method: 'POST', body }),
   update: (id: string, body: UpdateJobRequest) =>
     apiRequest<{ job: JobDetail }>(`/api/v1/jobs/${id}`, { method: 'PATCH', body }),
   assign: (id: string, body: AssignJobRequest) =>

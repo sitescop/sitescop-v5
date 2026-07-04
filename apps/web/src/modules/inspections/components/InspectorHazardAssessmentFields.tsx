@@ -22,7 +22,7 @@ export function InspectorHazardAssessmentFields({
 
   return (
     <section className="space-y-4 rounded-sm border border-border bg-surface p-4">
-      <h3 className="text-lg font-semibold text-text">Inspector Hazard Assessment</h3>
+      <h3 className="inspection-section-heading">Inspector Hazard Assessment</h3>
       <p className="text-sm text-text-muted">
         Complete at the door before entering. Default is Low (safe to proceed). Only tick a hazard if you detect an
         aggressive dog, dangerous or unrestrained animal, or aggressive/hostile client behaviour on arrival. You can set

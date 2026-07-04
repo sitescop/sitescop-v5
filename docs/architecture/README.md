@@ -1,14 +1,39 @@
 # SiteScop V5 Architecture
 
-Phase 0 foundation implemented. See root README for setup.
+## Phase status
 
-## Modules (Planned)
+| Phase | Module | Status |
+|-------|--------|--------|
+| 0 | Foundation (auth, design system, RBAC) | Complete |
+| 1 | Jobs, CRM, Settings, Admin | Complete |
+| 2 | Agreements (send, sign, tablet flow) | Complete |
+| 3 | Inspections, Room Engine (building) | Complete |
+| 4 | Pest & Combined inspections | Complete |
+| 5 | Reports, Calendar | Complete |
+| 6 | Notifications, Accounts, global search, security pass | Complete |
+| 7 | Client portal, Stripe, auto-email PDFs | Complete |
+| 8 | SMS notifications (Twilio) | Complete |
 
-| Module | Phase |
-|--------|-------|
-| Jobs, CRM, Settings, Admin | Phase 1 |
-| Agreements | Phase 2 |
-| Inspections, Room Engine | Phase 3 |
-| Pest & Combined | Phase 4 |
-| Reports, Calendar | Phase 5 |
-| Notifications, Accounts | Phase 6 |
+## Calendar (Phase 5)
+
+- Month view of scheduled jobs
+- Inspector filter (office roles)
+- Schedule / reschedule jobs (`calendar:manage`)
+- Unscheduled jobs list
+
+## Phase 6 — complete (localhost)
+
+- **Global search** — top bar (`Ctrl+K`)
+- **Security pass** — role escalation, inspector scoping, auth rate limits (see `PHASE6-CHECKLIST.md`)
+- **E2E test checklist** — `docs/PHASE6-CHECKLIST.md`
+- **Go-live / domain** — deferred until you choose a public URL (`DEPLOYMENT.md`)
+
+## Phase 8 — complete (localhost)
+
+- **Twilio SMS** — agreement, invoice, report-ready, job reminder (see `PHASE8-CHECKLIST.md`)
+- **Settings → SMS** — enable per company, test send, template JSON
+- **Audit** — `sms_messages` table logs outbound SMS
+
+## Deferred
+
+- **Go-live** — ready via Docker; see [GO-LIVE.md](./GO-LIVE.md)

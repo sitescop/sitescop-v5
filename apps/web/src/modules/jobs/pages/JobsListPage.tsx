@@ -14,25 +14,13 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/design-system/components';
-import { JOB_TYPE_LABELS, JobStatus, type JobSummary } from '@sitescop/shared-types';
+import { JOB_TYPE_LABELS, type JobSummary } from '@sitescop/shared-types';
+import { getJobWorkflowStatus } from '@/modules/jobs/lib/job-display-status';
+import { JobWorkflowStatusBadge } from '@/modules/jobs/components/JobWorkflowStatusBadge';
 
-function workflowHint(status: JobStatus): string {
-  switch (status) {
-    case JobStatus.DRAFT:
-      return 'Send agreement';
-    case JobStatus.PENDING_ASSIGNMENT:
-      return 'Payment / assign';
-    case JobStatus.ASSIGNED:
-      return 'Inspector accept';
-    case JobStatus.ACCEPTED:
-      return 'Start inspection';
-    case JobStatus.IN_PROGRESS:
-      return 'Inspection';
-    case JobStatus.COMPLETED:
-      return 'Complete';
-    default:
-      return '—';
-  }
+function workflowHint(row: JobSummary): string {
+  const { label } = getJobWorkflowStatus(row.status, row.inspectionStatus);
+  return label;
 }
 
 const VIEWS = [
@@ -45,6 +33,7 @@ export function JobsListPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const canCreate = useAuthStore((s) => s.hasPermission('jobs:create'));
+  const canCreateManual = useAuthStore((s) => s.hasPermission('jobs:create_manual'));
   const view = searchParams.get('view') ?? '';
   const search = searchParams.get('search') ?? '';
   const [searchInput, setSearchInput] = useState(search);
@@ -78,20 +67,35 @@ export function JobsListPage() {
       {
         key: 'client',
         header: 'Client',
-        hideOnMobile: true,
-        render: (row: JobSummary) => row.clientContact?.displayName ?? '—',
+        render: (row: JobSummary) => (
+          <div>
+            <p className="font-medium text-text">{row.clientContact?.displayName ?? '—'}</p>
+            {row.clientContact?.phone && (
+              <p className="text-sm font-medium text-primary">{row.clientContact.phone}</p>
+            )}
+          </div>
+        ),
       },
       {
         key: 'type',
-        header: 'Type of Inspection',
-        render: (row: JobSummary) => JOB_TYPE_LABELS[row.type],
+        header: 'Type',
+        render: (row: JobSummary) => (
+          <span className="font-bold uppercase text-danger">{JOB_TYPE_LABELS[row.type]}</span>
+        ),
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (row: JobSummary) => (
+          <JobWorkflowStatusBadge jobStatus={row.status} inspectionStatus={row.inspectionStatus} />
+        ),
       },
       {
         key: 'workflow',
-        header: 'Next step',
+        header: 'Action',
         hideOnMobile: true,
         render: (row: JobSummary) => (
-          <span className="text-sm text-text-muted">{workflowHint(row.status)}</span>
+          <span className="text-sm font-medium text-text">{workflowHint(row)}</span>
         ),
       },
       {
@@ -122,13 +126,22 @@ export function JobsListPage() {
         description="Manage inspection jobs, assignments, and lifecycle"
         breadcrumbs={[{ label: 'Jobs' }]}
         actions={
-          canCreate ? (
-            <Button asChild>
-              <Link to="/jobs/new" state={{ fromActive: view === '' }}>
-                <Plus className="h-4 w-4" />
-                New Job
-              </Link>
-            </Button>
+          canCreate || canCreateManual ? (
+            <div className="flex flex-wrap gap-2">
+              {canCreateManual && (
+                <Button variant="accent" asChild>
+                  <Link to="/jobs/manual">Start Job</Link>
+                </Button>
+              )}
+              {canCreate && (
+                <Button asChild>
+                  <Link to="/jobs/new" state={{ fromActive: view === '' }}>
+                    <Plus className="h-4 w-4" />
+                    New Job
+                  </Link>
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
         tabs={

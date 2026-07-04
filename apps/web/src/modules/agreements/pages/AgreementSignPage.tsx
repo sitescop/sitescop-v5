@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { JOB_TYPE_LABELS } from '@sitescop/shared-types';
 import { agreementsApi } from '@/lib/api/agreements';
 import { Button, Card, Input, LoadingOverlay, SignaturePad, type SignaturePadHandle } from '@/design-system/components';
@@ -14,6 +14,8 @@ export function AgreementSignPage() {
   const [accepted, setAccepted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [agreementNumber, setAgreementNumber] = useState('');
+  const [signedJobId, setSignedJobId] = useState<string | null>(null);
+  const [signedJobNumber, setSignedJobNumber] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const { data, isLoading, error: loadError } = useQuery({
@@ -51,6 +53,8 @@ export function AgreementSignPage() {
       }),
     onSuccess: (result) => {
       setAgreementNumber(result.agreementNumber);
+      setSignedJobId(result.jobId);
+      setSignedJobNumber(result.jobNumber);
       setSubmitted(true);
     },
     onError: (e) => setError(e instanceof Error ? e.message : 'Signing failed'),
@@ -83,6 +87,17 @@ export function AgreementSignPage() {
           <p className="mt-2 text-text-light">
             Thank you. Agreement <strong>{agreementNumber}</strong> has been submitted successfully.
           </p>
+          {signedJobId && (
+            <div className="mt-6 space-y-3">
+              <p className="text-sm text-text-light">
+                Inspector: job <strong>{signedJobNumber}</strong> is ready. Record payment, then start the
+                inspection.
+              </p>
+              <Button variant="accent" asChild className="w-full">
+                <Link to={`/jobs/${signedJobId}`}>Continue to job</Link>
+              </Button>
+            </div>
+          )}
         </Card>
       </div>
     );

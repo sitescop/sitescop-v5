@@ -5,7 +5,11 @@ import {
   createApiKey,
   deleteApiKey,
   getCompanySettings,
+  getEmailDeliveryStatus,
+  getSmsDeliveryStatus,
   listApiKeys,
+  sendTestEmail,
+  sendTestSms,
   updateCompanyPreferences,
   updateCompanyProfile,
 } from './settings.service.js';
@@ -45,6 +49,58 @@ export async function registerSettingsRoutes(app: FastifyInstance): Promise<void
     async (request, reply) => {
       try {
         const data = await updateCompanyPreferences(request.authUser!, request.body as never, request);
+        return reply.send(data);
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.get(
+    '/api/v1/settings/email/status',
+    { preHandler: [...auth, requirePermission('settings:view')] },
+    async (request, reply) => {
+      try {
+        const data = await getEmailDeliveryStatus(request.authUser!);
+        return reply.send(data);
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/api/v1/settings/email/test',
+    { preHandler: [...auth, requirePermission('settings:manage')] },
+    async (request, reply) => {
+      try {
+        const data = await sendTestEmail(request.authUser!, request.body as never, request);
+        return reply.send(data);
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.get(
+    '/api/v1/settings/sms/status',
+    { preHandler: [...auth, requirePermission('settings:view')] },
+    async (request, reply) => {
+      try {
+        const data = await getSmsDeliveryStatus(request.authUser!);
+        return reply.send(data);
+      } catch (error) {
+        return handleRouteError(error, request, reply);
+      }
+    },
+  );
+
+  app.post(
+    '/api/v1/settings/sms/test',
+    { preHandler: [...auth, requirePermission('settings:manage')] },
+    async (request, reply) => {
+      try {
+        const data = await sendTestSms(request.authUser!, request.body as never, request);
         return reply.send(data);
       } catch (error) {
         return handleRouteError(error, request, reply);

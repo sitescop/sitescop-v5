@@ -15,6 +15,12 @@ import { registerInspectionsRoutes } from './modules/inspections/inspections.rou
 import { registerReportsRoutes } from './modules/reports/reports.routes.js';
 import { registerNotificationsRoutes } from './modules/notifications/notifications.routes.js';
 import { registerInvoicesRoutes } from './modules/invoices/invoices.routes.js';
+import { registerCalendarRoutes } from './modules/calendar/calendar.routes.js';
+import { registerSearchRoutes } from './modules/search/search.routes.js';
+import { registerPortalRoutes } from './modules/portal/portal.routes.js';
+import { getSmtpConfigStatus } from './shared/email/email-config.js';
+import { isStripeConfigured } from './modules/portal/stripe.service.js';
+import { getTwilioConfigStatus, isTwilioConfigured } from './shared/sms/sms-config.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -45,11 +51,25 @@ export async function buildApp() {
     timeWindow: '1 minute',
   });
 
-  app.get('/api/v1/health', async () => ({
-    status: 'ok',
-    version: '5.0.0',
-    phase: '6',
-  }));
+  app.get('/api/v1/health', async () => {
+    const smtp = getSmtpConfigStatus();
+    const email = config.isProduction
+      ? { configured: smtp.configured }
+      : {
+          configured: smtp.configured,
+          host: smtp.host || null,
+          user: smtp.user || null,
+          reason: smtp.reason,
+        };
+    return {
+      status: 'ok',
+      version: '5.0.0',
+      phase: '8-complete',
+      email,
+      stripe: { configured: isStripeConfigured() },
+      sms: { configured: isTwilioConfigured() },
+    };
+  });
 
   await registerAuthRoutes(app);
   await registerDashboardRoutes(app);
@@ -62,6 +82,9 @@ export async function buildApp() {
   await registerReportsRoutes(app);
   await registerNotificationsRoutes(app);
   await registerInvoicesRoutes(app);
+  await registerCalendarRoutes(app);
+  await registerSearchRoutes(app);
+  await registerPortalRoutes(app);
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof Error && 'statusCode' in error && typeof error.statusCode === 'number') {
@@ -82,6 +105,18 @@ export async function buildApp() {
 
 export async function startServer() {
   const app = await buildApp();
+  const smtp = getSmtpConfigStatus();
+  if (smtp.configured) {
+    app.log.info(`Email SMTP ready: ${smtp.user} via ${smtp.host}:${smtp.port}`);
+  } else {
+    app.log.warn(`Email SMTP not ready: ${smtp.reason}`);
+  }
+  const twilio = getTwilioConfigStatus();
+  if (twilio.configured) {
+    app.log.info(`Twilio SMS ready from ${twilio.fromNumber}`);
+  } else {
+    app.log.warn(`Twilio SMS not ready: ${twilio.reason}`);
+  }
   await app.listen({ port: config.api.port, host: config.api.host });
   app.log.info(`SiteScop API listening on http://${config.api.host}:${config.api.port}`);
   return app;

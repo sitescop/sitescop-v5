@@ -1,15 +1,17 @@
 import {
   AssignmentStatus,
   InspectionStatus,
+  JobContractSource,
   JobStatus,
   JobType,
   type Prisma,
 } from '@prisma/client';
 import type { AuthUser } from '@sitescop/shared-types';
-import { UserRole, roleHasPermission } from '@sitescop/shared-types';
+import { UserRole, JOB_TYPE_LABELS, roleHasPermission } from '@sitescop/shared-types';
 import type {
   AssignJobRequest,
   CreateJobRequest,
+  CreateManualJobRequest,
   DeclineJobRequest,
   JobDetail,
   JobsListResponse,
@@ -33,6 +35,7 @@ import {
   assertJobReadyForInspection,
   getJobBillingStatus,
 } from '../../shared/billing/job-billing-readiness.js';
+import { findOrCreateManualClientContact } from '../../shared/crm/find-or-create-manual-client.js';
 import { NotificationType, AgreementStatus } from '@prisma/client';
 import { createNotification } from '../notifications/notifications.service.js';
 import { loadCompanyEmailContext, sendCompanyEmail } from '../../shared/email/email.service.js';
@@ -75,6 +78,17 @@ export const declineJobSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+export const createManualJobSchema = z.object({
+  type: z.nativeEnum(JobType),
+  clientName: z.string().min(1).max(200),
+  clientEmail: z.string().email().optional(),
+  clientPhone: z.string().min(1).max(30),
+  propertyAddress: z.string().min(1).max(500),
+  priceCents: z.number().int().min(0).optional(),
+  notes: z.string().max(5000).optional(),
+  inspectorId: z.string().optional(),
+});
+
 const jobInclude = {
   property: true,
   clientContact: true,
@@ -89,18 +103,51 @@ const jobInclude = {
 
 type JobWithRelations = Prisma.JobGetPayload<{ include: typeof jobInclude }>;
 
-async function buildJobDetailResponse(job: JobWithRelations): Promise<JobDetail> {
-  const billing = await getJobBillingStatus(job.id, job.companyId);
-  return mapJobDetail(job, billing);
+async function latestInspectionStatusByJobIds(
+  jobIds: string[],
+  companyId?: string,
+): Promise<Map<string, InspectionStatus>> {
+  if (jobIds.length === 0) return new Map();
+
+  const rows = await prisma.inspection.findMany({
+    where: {
+      jobId: { in: jobIds },
+      ...(companyId ? { companyId } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { jobId: true, status: true },
+  });
+
+  const map = new Map<string, InspectionStatus>();
+  for (const row of rows) {
+    if (!map.has(row.jobId)) {
+      map.set(row.jobId, row.status);
+    }
+  }
+  return map;
 }
 
-function mapJobSummary(job: JobWithRelations): JobSummary {
+async function buildJobDetailResponse(job: JobWithRelations): Promise<JobDetail> {
+  const [billing, latestInspection] = await Promise.all([
+    getJobBillingStatus(job.id, job.companyId),
+    prisma.inspection.findFirst({
+      where: { jobId: job.id, companyId: job.companyId },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true },
+    }),
+  ]);
+  return mapJobDetail(job, billing, latestInspection?.status ?? null);
+}
+
+function mapJobSummary(job: JobWithRelations, inspectionStatus: InspectionStatus | null = null): JobSummary {
   return {
     id: job.id,
     jobNumber: job.jobNumber,
     title: job.title,
     type: job.type as JobSummary['type'],
+    contractSource: job.contractSource as JobSummary['contractSource'],
     status: job.status as JobSummary['status'],
+    inspectionStatus: inspectionStatus as JobSummary['inspectionStatus'],
     scheduledDate: job.scheduledDate?.toISOString() ?? null,
     scheduledTime: job.scheduledTime,
     priceCents: job.priceCents,
@@ -115,9 +162,13 @@ function mapJobSummary(job: JobWithRelations): JobSummary {
   };
 }
 
-function mapJobDetail(job: JobWithRelations, billing?: Awaited<ReturnType<typeof getJobBillingStatus>>): JobDetail {
+function mapJobDetail(
+  job: JobWithRelations,
+  billing?: Awaited<ReturnType<typeof getJobBillingStatus>>,
+  inspectionStatus: InspectionStatus | null = null,
+): JobDetail {
   return {
-    ...mapJobSummary(job),
+    ...mapJobSummary(job, inspectionStatus),
     description: job.description,
     notes: job.notes,
     completedAt: job.completedAt?.toISOString() ?? null,
@@ -214,8 +265,13 @@ export async function listJobs(
     prisma.job.count({ where }),
   ]);
 
+  const inspectionMap = await latestInspectionStatusByJobIds(
+    jobs.map((j) => j.id),
+    companyId ?? undefined,
+  );
+
   return {
-    jobs: jobs.map(mapJobSummary),
+    jobs: jobs.map((j) => mapJobSummary(j, inspectionMap.get(j.id) ?? null)),
     total,
     page,
     pageSize,
@@ -305,6 +361,108 @@ export async function createJob(
   return buildJobDetailResponse(job);
 }
 
+export async function createManualJob(
+  user: AuthUser,
+  input: CreateManualJobRequest,
+  request?: import('fastify').FastifyRequest,
+): Promise<JobDetail> {
+  if (!roleHasPermission(user.role, 'jobs:create_manual')) {
+    throw new ForbiddenError('You cannot create manual paper-contract jobs');
+  }
+
+  const data = createManualJobSchema.parse(input);
+  let companyId = resolveCompanyScope(user);
+  if (!companyId) {
+    companyId = requireCompanyForCreate(user);
+  }
+
+  let inspectorId = data.inspectorId;
+  if (user.role === UserRole.INSPECTOR) {
+    inspectorId = user.id;
+  } else if (!inspectorId) {
+    throw new AppError('Select an inspector for this manual job', 'VALIDATION_ERROR');
+  }
+
+  const inspector = await prisma.user.findFirst({
+    where: {
+      id: inspectorId,
+      companyId,
+      role: UserRole.INSPECTOR,
+      status: 'ACTIVE',
+    },
+  });
+  if (!inspector) throw new NotFoundError('Inspector not found');
+
+  const clientContactId = await findOrCreateManualClientContact(
+    companyId,
+    {
+      clientName: data.clientName,
+      clientEmail: data.clientEmail,
+      clientPhone: data.clientPhone,
+    },
+    user.id,
+    request,
+  );
+
+  const jobNumber = await generateJobNumber(companyId);
+  const typeLabel = JOB_TYPE_LABELS[data.type] ?? 'Inspection';
+  const title = `${typeLabel} — ${data.propertyAddress.trim()}`;
+
+  const job = await prisma.$transaction(async (tx) => {
+    const property = await tx.property.create({
+      data: {
+        companyId,
+        addressLine1: data.propertyAddress.trim(),
+        suburb: 'See job notes',
+        state: 'NSW',
+        postcode: '0000',
+      },
+    });
+
+    const created = await tx.job.create({
+      data: {
+        companyId,
+        jobNumber,
+        title,
+        type: data.type,
+        contractSource: JobContractSource.MANUAL_PAPER,
+        status: JobStatus.ACCEPTED,
+        propertyId: property.id,
+        clientContactId,
+        priceCents: data.priceCents ?? null,
+        notes: data.notes?.trim() || 'Paper contract — signed offline.',
+        assignedInspectorId: inspectorId,
+        createdById: user.id,
+      },
+      include: jobInclude,
+    });
+
+    await tx.jobAssignment.create({
+      data: {
+        jobId: created.id,
+        inspectorId: inspectorId!,
+        assignedById: user.id,
+        status: AssignmentStatus.ACCEPTED,
+        respondedAt: new Date(),
+      },
+    });
+
+    return created;
+  });
+
+  await createAuditLog({
+    companyId,
+    actorId: user.id,
+    action: 'job.created_manual',
+    entityType: 'Job',
+    entityId: job.id,
+    metadata: { jobNumber: job.jobNumber, inspectorId },
+    request,
+  });
+
+  return buildJobDetailResponse(job);
+}
+
 export async function sendJobAgreement(
   user: AuthUser,
   jobId: string,
@@ -313,7 +471,8 @@ export async function sendJobAgreement(
   const companyId = resolveCompanyScope(user) ?? user.companyId;
   if (!companyId) throw new ForbiddenError('Company required');
 
-  await getJobOrThrow(jobId, companyId);
+  const job = await getJobOrThrow(jobId, companyId);
+  assertJobAccess(user, job);
 
   const existing = await prisma.agreement.findFirst({
     where: {
@@ -358,9 +517,14 @@ export async function updateJob(
   const companyId = resolveCompanyScope(user);
   const existing = await getJobOrThrow(id, companyId);
   assertJobAccess(user, existing);
+  const canSchedule = roleHasPermission(user.role, 'calendar:manage');
 
   if (existing.deletedAt) {
     throw new AppError('Cannot edit deleted job', 'INVALID_STATE');
+  }
+
+  if (!canSchedule && (data.scheduledDate !== undefined || data.scheduledTime !== undefined)) {
+    throw new ForbiddenError('Only office staff can change the scheduled date. Contact the office to reschedule.');
   }
 
   let propertyId = existing.propertyId;
@@ -417,7 +581,10 @@ export async function assignJob(
   const companyId = resolveCompanyScope(user);
   const job = await getJobOrThrow(id, companyId);
 
-  if (job.status === JobStatus.PENDING_ASSIGNMENT || job.status === JobStatus.DRAFT) {
+  if (
+    (job.status === JobStatus.PENDING_ASSIGNMENT || job.status === JobStatus.DRAFT) &&
+    job.contractSource !== JobContractSource.MANUAL_PAPER
+  ) {
     await assertJobReadyForInspection(job.id, job.companyId);
   }
 
@@ -629,6 +796,40 @@ export async function startJob(user: AuthUser, id: string, request?: import('fas
 }
 
 export async function completeJob(user: AuthUser, id: string, request?: import('fastify').FastifyRequest) {
+  const companyId = resolveCompanyScope(user);
+  const job = await getJobOrThrow(id, companyId);
+  assertJobAccess(user, job);
+
+  if (job.status === JobStatus.COMPLETED) {
+    throw new AppError('Job is already completed', 'INVALID_STATE');
+  }
+
+  const openInspection = await prisma.inspection.findFirst({
+    where: {
+      jobId: id,
+      companyId,
+      status: { in: [InspectionStatus.DRAFT, InspectionStatus.IN_PROGRESS] },
+    },
+  });
+  if (openInspection) {
+    throw new AppError(
+      'An inspection is in progress. Open the inspection report and click Complete Inspection when finished.',
+      'INSPECTION_IN_PROGRESS',
+    );
+  }
+
+  if (user.role === UserRole.INSPECTOR) {
+    const completedInspection = await prisma.inspection.findFirst({
+      where: { jobId: id, companyId, status: InspectionStatus.COMPLETED },
+    });
+    if (!completedInspection) {
+      throw new AppError(
+        'Start the inspection, complete the report, then use Complete Inspection — do not skip the inspection form.',
+        'INSPECTION_REQUIRED',
+      );
+    }
+  }
+
   return transitionJob(
     user,
     id,

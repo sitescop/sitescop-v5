@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth, requirePermission } from '../../shared/auth/middleware.js';
+import { requireAuth, requirePermission, requireAnyPermission } from '../../shared/auth/middleware.js';
 import { handleRouteError } from '../../shared/http/handler.js';
 import {
   createInvoice,
@@ -117,7 +117,7 @@ export async function registerInvoicesRoutes(app: FastifyInstance): Promise<void
 
   app.post(
     '/api/v1/invoices/:id/mark-paid',
-    { preHandler: [...auth, requirePermission('billing:manage')] },
+    { preHandler: [...auth, requireAnyPermission('billing:manage', 'invoices:mark_paid')] },
     async (request, reply) => {
       try {
         const { id } = request.params as { id: string };

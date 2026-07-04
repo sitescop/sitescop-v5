@@ -1,18 +1,43 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Activity } from 'lucide-react';
-import { USER_ROLE_LABELS, type RoleDashboardData } from '@sitescop/shared-types';
+import { USER_ROLE_LABELS, UserRole, type RoleDashboardData } from '@sitescop/shared-types';
 import { dashboardApi } from '@/lib/api/auth';
 import { useAuthStore } from '@/modules/auth/store/auth-store';
+import { TodayJobsPanel } from '@/modules/calendar/components/TodayJobsPanel';
+import { localDateKey } from '@/modules/calendar/lib/calendar-date-utils';
 import { PageHeader } from '@/design-system/components/PageHeader';
 import { StatTile } from '@/design-system/components/StatTile';
 import { Card, CardHeader, CardTitle } from '@/design-system/components/Card';
 import { Button } from '@/design-system/components/Button';
 import { LoadingOverlay } from '@/design-system/components/LoadingOverlay';
 import { Badge } from '@/design-system/components/Badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/design-system/components/Tabs';
+
+type DashboardTab = 'overview' | 'today';
+
+function parseDashboardTab(raw: string | null, canViewCalendar: boolean): DashboardTab {
+  if (canViewCalendar && raw === 'today') return 'today';
+  return 'overview';
+}
 
 export function DashboardPage() {
   const user = useAuthStore((s) => s.user);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const canViewCalendar = hasPermission('calendar:view');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const defaultTab: DashboardTab = user?.role === UserRole.INSPECTOR && canViewCalendar ? 'today' : 'overview';
+  const tab = parseDashboardTab(searchParams.get('tab') ?? defaultTab, canViewCalendar);
+
+  function setTab(nextTab: DashboardTab) {
+    const next = new URLSearchParams(searchParams);
+    if (nextTab === 'overview') {
+      next.delete('tab');
+    } else {
+      next.set('tab', nextTab);
+    }
+    setSearchParams(next, { replace: true });
+  }
 
   const { data, isLoading, error } = useQuery<RoleDashboardData>({
     queryKey: ['dashboard'],
@@ -39,6 +64,31 @@ export function DashboardPage() {
         breadcrumbs={[{ label: 'Dashboard' }]}
       />
 
+      {canViewCalendar ? (
+        <Tabs value={tab} onValueChange={(value) => setTab(parseDashboardTab(value, canViewCalendar))} className="mb-8">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="today">Today&apos;s Jobs</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="today">
+            <TodayJobsPanel date={localDateKey()} />
+          </TabsContent>
+
+          <TabsContent value="overview">
+            <DashboardOverview data={data} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <DashboardOverview data={data} />
+      )}
+    </div>
+  );
+}
+
+function DashboardOverview({ data }: { data: RoleDashboardData }) {
+  return (
+    <>
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {data.stats.map((stat) => (
           <StatTile
@@ -108,6 +158,6 @@ export function DashboardPage() {
           </div>
         </Card>
       </div>
-    </div>
+    </>
   );
 }

@@ -5,6 +5,7 @@ export const EMAIL_TEMPLATE_KEYS = {
   paymentReceived: 'paymentReceived',
   jobAssigned: 'jobAssigned',
   jobCompleted: 'jobCompleted',
+  reportReady: 'reportReady',
 } as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[keyof typeof EMAIL_TEMPLATE_KEYS];
@@ -79,6 +80,19 @@ Inspector: {{inspectorName}}
 You can generate the inspection report from the Reports section.
 
 {{signature}}`,
+
+  reportReady: `Dear {{clientName}},
+
+Your inspection report for {{propertyAddress}} is ready.
+
+Job: {{jobNumber}}
+Inspection: {{inspectionNumber}}
+
+Your report is attached to this email. You can also sign in to your client portal to download it again at any time.
+
+If you have any questions, reply to this email or call us on {{companyPhone}}.
+
+{{signature}}`,
 };
 
 export const EMAIL_SUBJECTS: Record<EmailTemplateKey, string> = {
@@ -88,4 +102,5 @@ export const EMAIL_SUBJECTS: Record<EmailTemplateKey, string> = {
   paymentReceived: 'Payment Received — {{invoiceNumber}}',
   jobAssigned: 'Job Assigned — {{jobNumber}}',
   jobCompleted: 'Job Completed — {{jobNumber}}',
+  reportReady: 'Your Inspection Report — {{jobNumber}}',
 };

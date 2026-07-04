@@ -178,8 +178,10 @@ export async function getDashboardDataForUser(user: AuthUser): Promise<RoleDashb
         ],
         activities,
         quickActions: [
+          { id: 'today', label: "Today's Jobs", href: '/dashboard?tab=today' },
           { id: 'jobs', label: 'My Jobs', href: '/jobs' },
           { id: 'inspections', label: 'My Inspections', href: '/inspections' },
+          { id: 'calendar', label: 'Calendar', href: '/calendar?view=today' },
         ],
       };
     }

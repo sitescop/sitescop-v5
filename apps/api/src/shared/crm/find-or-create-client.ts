@@ -1,9 +1,11 @@
 import { ContactStatus, ContactType } from '@prisma/client';
 import { createAuditLog } from '../audit/audit.service.js';
 import { prisma } from '../database/prisma.js';
+import { stripLeadingHonorifics } from './client-name.js';
 
 export function splitClientName(fullName: string): { firstName: string; lastName: string } {
-  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const normalized = stripLeadingHonorifics(fullName);
+  const parts = normalized.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return { firstName: 'Client', lastName: '-' };
   if (parts.length === 1) return { firstName: parts[0], lastName: '-' };
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') };

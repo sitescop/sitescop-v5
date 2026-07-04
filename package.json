@@ -18,6 +18,10 @@
     "db:migrate": "npm run db:deploy --workspace=@sitescop/api",
     "db:deploy": "npm run db:deploy --workspace=@sitescop/api",
     "db:seed": "npm run db:seed --workspace=@sitescop/api",
+    "db:seed:prod": "node scripts/seed-prod.mjs",
+    "go-live": "node scripts/go-live.mjs",
+    "go-live:logs": "docker compose --env-file .env.production -f docker-compose.prod.yml logs -f",
+    "go-live:down": "docker compose --env-file .env.production -f docker-compose.prod.yml down",
     "db:studio": "npm run db:studio --workspace=@sitescop/api",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\""
   },

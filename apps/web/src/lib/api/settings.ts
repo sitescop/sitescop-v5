@@ -19,4 +19,15 @@ export const settingsApi = {
     apiRequest<CreateApiKeyResponse>('/api/v1/settings/api-keys', { method: 'POST', body }),
   deleteApiKey: (id: string) =>
     apiRequest<{ success: true }>(`/api/v1/settings/api-keys/${id}`, { method: 'DELETE' }),
+  getSmsStatus: () =>
+    apiRequest<{
+      twilio: { configured: boolean; fromNumber: string; reason: string | null };
+      companyEnabled: boolean;
+      senderId: string | null;
+    }>('/api/v1/settings/sms/status'),
+  sendTestSms: (body: { toPhone: string }) =>
+    apiRequest<{ toPhone: string; sent: boolean; error?: string }>('/api/v1/settings/sms/test', {
+      method: 'POST',
+      body,
+    }),
 };

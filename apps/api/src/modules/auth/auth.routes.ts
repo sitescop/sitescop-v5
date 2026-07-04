@@ -24,8 +24,19 @@ function formatZodError(error: ZodError): Record<string, string[]> {
   return details;
 }
 
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: config.isProduction,
+    sameSite: 'strict' as const,
+    path: '/',
+  };
+}
+
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/v1/auth/login', async (request, reply) => {
+  app.post('/api/v1/auth/login', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     try {
       const body = loginSchema.parse(request.body);
       const { user, sessionToken } = await loginUser(body.email, body.password, {
@@ -34,10 +45,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       });
 
       reply.setCookie(config.session.cookieName, sessionToken, {
-        httpOnly: true,
-        secure: config.isProduction,
-        sameSite: 'strict',
-        path: '/',
+        ...sessionCookieOptions(),
         maxAge: config.session.maxAgeMs / 1000,
       });
 
@@ -63,7 +71,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     if (token) {
       await logoutUser(token, request.authUser?.id);
     }
-    reply.clearCookie(config.session.cookieName, { path: '/' });
+    reply.clearCookie(config.session.cookieName, sessionCookieOptions());
     return reply.send({ success: true });
   });
 
@@ -75,7 +83,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.post('/api/v1/auth/forgot-password', async (request, reply) => {
+  app.post('/api/v1/auth/forgot-password', {
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
     try {
       const body = forgotPasswordSchema.parse(request.body);
       const result = await requestPasswordReset(body.email);
@@ -102,7 +112,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/v1/auth/reset-password', async (request, reply) => {
+  app.post('/api/v1/auth/reset-password', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
     try {
       const body = resetPasswordSchema.parse(request.body);
       await resetPassword(body.token, body.password);

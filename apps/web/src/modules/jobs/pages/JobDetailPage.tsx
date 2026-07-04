@@ -5,11 +5,12 @@ import { jobsApi } from '@/lib/api/jobs';
 import { inspectionsApi } from '@/lib/api/inspections';
 import { useAuthStore } from '@/modules/auth/store/auth-store';
 import { JobWorkflowPanel } from '@/modules/jobs/components/JobWorkflowPanel';
+import { JobOverviewHeader } from '@/modules/jobs/components/JobOverviewHeader';
+import { JobWorkflowStatusBadge } from '@/modules/jobs/components/JobWorkflowStatusBadge';
 import {
   Badge,
   Button,
   Card,
-  JobStatusBadge,
   LoadingOverlay,
   Modal,
   PageHeader,
@@ -80,7 +81,7 @@ export function JobDetailPage() {
     onSuccess: (_, action) => {
       if (action === 'delete') navigate('/jobs?view=recycle');
       else if (action === 'permanent') navigate('/jobs');
-      else if (action === 'archive') navigate('/jobs?view=archived');
+      else if (action === 'archive') invalidate();
       else if (action === 'unarchive') navigate('/jobs');
       else invalidate();
     },
@@ -123,7 +124,7 @@ export function JobDetailPage() {
     <div>
       <PageHeader
         title={job.title}
-        description={`${job.jobNumber} · ${job.clientContact?.displayName ?? 'No client'}`}
+        description={job.property?.formattedAddress ?? job.jobNumber}
         breadcrumbs={[
           { label: 'Jobs', href: '/jobs' },
           { label: job.jobNumber },
@@ -137,26 +138,71 @@ export function JobDetailPage() {
         }
       />
 
+      {!job.deletedAt && (
+        <JobOverviewHeader
+          job={job}
+          billing={billing}
+          inspection={openInspection}
+          isAssignedInspector={isAssignedInspector}
+          canManageInspection={
+            hasPermission('inspections:edit') &&
+            (isAssignedInspector || hasPermission('jobs:assign'))
+          }
+          canAssign={hasPermission('jobs:assign')}
+          onAcceptJob={() => actionMutation.mutate('accept')}
+          onDeclineJob={() => actionMutation.mutate('decline')}
+          onAssignClick={() => setAssignOpen(true)}
+          onStartInspection={() => startInspectionMutation.mutate()}
+          isAccepting={actionMutation.isPending}
+          isStartingInspection={startInspectionMutation.isPending}
+        />
+      )}
+
+      {job.archivedAt && !job.deletedAt && (
+        <div className="mb-6 rounded-sm border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
+          This job is archived. You can still open and edit the inspection report below.
+          {hasPermission('jobs:archive') && (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="font-medium text-primary hover:underline"
+                onClick={() => actionMutation.mutate('unarchive')}
+              >
+                Unarchive job
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="mb-6 flex flex-wrap gap-2">
-        <JobStatusBadge status={job.status} />
+        <JobWorkflowStatusBadge
+          jobStatus={job.status}
+          inspectionStatus={job.inspectionStatus ?? openInspection?.status}
+        />
         {job.deletedAt && <Badge variant="danger">In Recycle Bin</Badge>}
         {job.archivedAt && <Badge variant="default">Archived</Badge>}
       </div>
 
       {showCreatedBanner && (
         <div className="mb-6 rounded-sm border border-success/40 bg-success/10 px-4 py-3 text-sm text-text">
-          Job created. Use step 1 below to send the agreement to your client.
+          {(location.state as { manual?: boolean } | null)?.manual
+            ? 'Paper contract job created. Click Start Inspection below to draft the report.'
+            : 'Job created. Use step 1 below to send the agreement to your client.'}
         </div>
       )}
 
-      {!job.deletedAt && !job.archivedAt && billing && (
+      {!job.deletedAt && billing && (
         <div className="mb-6">
           <JobWorkflowPanel
             job={job}
             billing={billing}
             inspection={openInspection}
             canSendAgreement={hasPermission('agreements:send')}
-            canManageBilling={hasPermission('billing:manage')}
+            canManageBilling={
+              hasPermission('billing:manage') || hasPermission('invoices:mark_paid')
+            }
             canAssign={hasPermission('jobs:assign')}
             canManageInspection={
               hasPermission('inspections:edit') &&
@@ -194,9 +240,22 @@ export function JobDetailPage() {
             </div>
             <div>
               <h3 className="text-sm font-medium text-text-light">Client</h3>
-              <p className="mt-1 text-text">{job.clientContact?.displayName ?? '—'}</p>
+              <p className="mt-1 font-medium text-text">{job.clientContact?.displayName ?? '—'}</p>
+              {job.clientContact?.phone && (
+                <a
+                  href={`tel:${job.clientContact.phone.replace(/\s+/g, '')}`}
+                  className="mt-1 block text-base font-medium text-primary hover:underline"
+                >
+                  {job.clientContact.phone}
+                </a>
+              )}
               {job.clientContact?.email && (
-                <p className="text-sm text-text-light">{job.clientContact.email}</p>
+                <a
+                  href={`mailto:${job.clientContact.email}`}
+                  className="block text-sm text-text-light hover:text-primary hover:underline"
+                >
+                  {job.clientContact.email}
+                </a>
               )}
             </div>
             <div>
@@ -225,9 +284,11 @@ export function JobDetailPage() {
         <Card className="space-y-3 p-6">
           <h3 className="font-semibold text-text">Other actions</h3>
 
-          {job.status === JobStatus.COMPLETED && openInspection && hasPermission('inspections:view') && (
-            <Button className="w-full" variant="secondary" asChild>
-              <Link to={`/inspections/${openInspection.id}`}>View Inspection Report</Link>
+          {openInspection && hasPermission('inspections:view') && (
+            <Button className="w-full" variant="accent" asChild>
+              <Link to={`/inspections/${openInspection.id}`}>
+                {hasPermission('inspections:edit') ? 'Edit Inspection Report' : 'View Inspection Report'}
+              </Link>
             </Button>
           )}
 

@@ -9,6 +9,7 @@ export type Permission =
   | 'jobs:view_all'
   | 'jobs:view'
   | 'jobs:create'
+  | 'jobs:create_manual'
   | 'jobs:assign'
   | 'jobs:accept'
   | 'jobs:complete'
@@ -30,6 +31,7 @@ export type Permission =
   | 'audit:view'
   | 'billing:view'
   | 'billing:manage'
+  | 'invoices:mark_paid'
   | 'client:portal';
 
 const ALL_PERMISSIONS: Permission[] = [
@@ -41,6 +43,7 @@ const ALL_PERMISSIONS: Permission[] = [
   'jobs:view_all',
   'jobs:view',
   'jobs:create',
+  'jobs:create_manual',
   'jobs:assign',
   'jobs:accept',
   'jobs:complete',
@@ -62,6 +65,7 @@ const ALL_PERMISSIONS: Permission[] = [
   'audit:view',
   'billing:view',
   'billing:manage',
+  'invoices:mark_paid',
   'client:portal',
 ];
 
@@ -73,6 +77,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'jobs:view_all',
     'jobs:view',
     'jobs:create',
+    'jobs:create_manual',
     'jobs:assign',
     'jobs:complete',
     'jobs:archive',
@@ -99,6 +104,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'jobs:view_all',
     'jobs:view',
     'jobs:create',
+    'jobs:create_manual',
     'jobs:assign',
     'jobs:complete',
     'jobs:archive',
@@ -119,6 +125,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   [UserRole.OFFICE_STAFF]: [
     'jobs:view',
     'jobs:create',
+    'jobs:create_manual',
     'agreements:view',
     'agreements:send',
     'crm:view',
@@ -127,10 +134,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
   [UserRole.INSPECTOR]: [
     'jobs:view',
+    'jobs:create_manual',
     'jobs:accept',
     'jobs:complete',
+    'agreements:view',
+    'agreements:send',
     'inspections:view',
     'inspections:edit',
+    'invoices:mark_paid',
+    'reports:view',
+    'reports:generate',
     'calendar:view',
   ],
   [UserRole.ACCOUNTANT]: [
@@ -141,7 +154,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'billing:manage',
     'crm:view',
   ],
-  [UserRole.CLIENT]: ['client:portal', 'agreements:view', 'reports:view'],
+  [UserRole.CLIENT]: ['client:portal'],
 };
 
 export function roleHasPermission(role: UserRole, permission: Permission): boolean {

@@ -57,6 +57,8 @@ export interface InspectionSummary {
   jobType: JobType;
   propertyAddress: string | null;
   clientName: string | null;
+  clientPhone: string | null;
+  clientEmail: string | null;
   inspectorName: string | null;
   progressPercent: number;
   startedAt: string | null;

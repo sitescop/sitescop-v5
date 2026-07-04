@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Download, FileText } from 'lucide-react';
-import { InspectionStatus, JobType, REPORT_TYPE_LABELS, ReportStatus } from '@sitescop/shared-types';
+import { InspectionStatus, ReportStatus, REPORT_TYPE_LABELS } from '@sitescop/shared-types';
 import { jobTypeToFormKind } from '@sitescop/room-engine-core';
 import { inspectionsApi } from '@/lib/api/inspections';
 import { downloadReport, reportsApi } from '@/lib/api/reports';
@@ -9,12 +9,12 @@ import { useAuthStore } from '@/modules/auth/store/auth-store';
 import {
   Button,
   Card,
-  InspectionStatusBadge,
   LoadingOverlay,
   PageHeader,
 } from '@/design-system/components';
 import { BuildingInspectionForm } from '../components/BuildingInspectionForm';
 import { CombinedInspectionForm } from '../components/CombinedInspectionForm';
+import { InspectionOverviewHeader } from '../components/InspectionOverviewHeader';
 import { InspectionRoomSections } from '../components/InspectionRoomSections';
 import { PestInspectionForm } from '../components/PestInspectionForm';
 import { useInspectionEditor } from '../hooks/useInspectionEditor';
@@ -74,9 +74,9 @@ export function InspectionWorkspacePage() {
   }
 
   const jobTypeLabel =
-    inspection.jobType === JobType.COMBINED
+    inspection.jobType === 'COMBINED'
       ? 'Combined Building & Pest'
-      : inspection.jobType === JobType.PEST
+      : inspection.jobType === 'PEST'
         ? 'Timber Pest'
         : 'Building';
 
@@ -116,32 +116,19 @@ export function InspectionWorkspacePage() {
   return (
     <div className="pb-24">
       <PageHeader
-        title={inspection.inspectionNumber}
-        description={`${inspection.jobNumber} · ${jobTypeLabel} · ${inspection.propertyAddress ?? inspection.jobTitle}`}
+        title="Inspection"
+        description={`${inspection.inspectionNumber} · ${jobTypeLabel}`}
         breadcrumbs={[
           { label: 'Inspections', href: '/inspections' },
           { label: inspection.inspectionNumber },
         ]}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <InspectionStatusBadge status={inspection.status} />
-            <span className="text-sm text-text-muted">{inspection.progressPercent}% complete</span>
-            {saveState === 'saving' && <span className="text-sm text-primary">Saving...</span>}
-            {saveState === 'saved' && <span className="text-sm text-success">Saved</span>}
-            {saveState === 'error' && (
-              <span className="text-sm text-danger">Save failed — changes kept locally, retry by editing again</span>
-            )}
-          </div>
-        }
       />
 
-      <div className="mb-4 h-2 overflow-hidden rounded-full bg-border">
-        <div className="h-full bg-primary transition-all" style={{ width: `${inspection.progressPercent}%` }} />
-      </div>
+      <InspectionOverviewHeader inspection={inspection} saveState={saveState} />
 
       {isCompleted && canEdit && (
         <div className="mb-4 rounded-sm border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-text">
-          This report is marked complete. You can still edit any section below — changes save automatically.
+          This report is complete. You can edit any section below at any time — changes save automatically.
           {formKind === 'COMBINED' && ' Combined jobs produce separate building and pest PDFs when you generate reports.'}
         </div>
       )}

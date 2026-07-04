@@ -75,6 +75,12 @@ function assertCanManageUser(actor: AuthUser, targetCompanyId: string | null): v
   }
 }
 
+function assertCanAssignRole(actor: AuthUser, role: UserRole): void {
+  if (role === UserRole.SUPER_ADMIN && actor.role !== SharedUserRole.SUPER_ADMIN) {
+    throw new ForbiddenError('Only super admins can assign the super admin role');
+  }
+}
+
 export async function listUsers(
   user: AuthUser,
   query: { page?: string; pageSize?: string; search?: string; role?: string; companyId?: string },
@@ -131,9 +137,14 @@ export async function createUser(
   }
 
   assertCanManageUser(actor, companyId ?? null);
+  assertCanAssignRole(actor, data.role);
 
   const existing = await prisma.user.findUnique({ where: { email: data.email.toLowerCase() } });
   if (existing) throw new ConflictError('Email already in use');
+
+  if (!data.password && process.env.NODE_ENV === 'production') {
+    throw new ForbiddenError('Password is required when creating users in production');
+  }
 
   const password = data.password ?? 'SiteScop2026!';
   const passwordHash = await hashPassword(password);
@@ -174,6 +185,10 @@ export async function updateUser(
   if (!existing) throw new NotFoundError('User not found');
 
   assertCanManageUser(actor, existing.companyId);
+
+  if (data.role) {
+    assertCanAssignRole(actor, data.role);
+  }
 
   const updateData: Prisma.UserUpdateInput = {
     firstName: data.firstName,

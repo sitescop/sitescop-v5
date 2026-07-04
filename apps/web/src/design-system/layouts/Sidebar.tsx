@@ -10,6 +10,7 @@ import {
   Shield,
   Settings,
   Building2,
+  Home,
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
@@ -18,6 +19,7 @@ import { useAuthStore } from '@/modules/auth/store/auth-store';
 import { cn } from '@/lib/utils';
 
 const iconMap: Record<string, LucideIcon> = {
+  Home,
   LayoutDashboard,
   Briefcase,
   FileSignature,

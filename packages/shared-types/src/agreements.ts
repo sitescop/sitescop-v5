@@ -122,12 +122,20 @@ export interface SendAgreementResponse {
   signingUrl: string;
   devSigningUrl?: string;
   emailSent: boolean;
+  emailError?: string;
+}
+
+export interface SignAgreementResponse {
+  success: true;
+  agreementNumber: string;
+  jobId: string | null;
+  jobNumber: string | null;
 }
 
 export interface SendNewAgreementRequest {
   type: JobType;
   clientName: string;
-  clientEmail: string;
+  clientEmail?: string;
   clientPhone?: string;
   propertyAddress?: string;
   priceCents: number;

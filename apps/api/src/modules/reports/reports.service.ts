@@ -33,6 +33,9 @@ import {
   resolveCompanyProfileForReport,
 } from '../../shared/branding/resolve-company-profile.js';
 import { syncLegacyDemoBrandingIfNeeded } from '../../shared/branding/sync-legacy-demo-branding.js';
+import { isEmailConfigured, loadCompanyEmailContext, trySendCompanyEmail } from '../../shared/email/email.service.js';
+import { notifyClientSms } from '../../shared/sms/notify-client.js';
+import { readFile } from 'node:fs/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPORTS_STORAGE_ROOT = join(__dirname, '../../../storage/reports');
@@ -216,6 +219,44 @@ async function loadInspection(user: AuthUser, inspectionId: string): Promise<Ins
   return inspection;
 }
 
+async function assertReportAccess(user: AuthUser, row: ReportRow): Promise<void> {
+  if (user.role === UserRole.INSPECTOR && !roleHasPermission(user.role, 'jobs:view_all')) {
+    const job = row.inspection.job;
+    const isAssigned = canInspectorAccessJob(job, user.id, false);
+    const isInspector = row.inspection.inspectorId === user.id;
+    if (!isAssigned && !isInspector) {
+      throw new ForbiddenError('Access denied');
+    }
+  }
+}
+
+async function loadReportRow(
+  user: AuthUser,
+  id: string,
+  extraWhere?: Prisma.InspectionReportWhereInput,
+): Promise<ReportRow> {
+  const companyId = scopedCompanyId(user);
+  const row = await prisma.inspectionReport.findFirst({
+    where: { id, companyId, ...extraWhere },
+    include: reportInclude,
+  });
+  if (!row) throw new NotFoundError('Report not found');
+  await assertReportAccess(user, row);
+  return row;
+}
+
+function inspectorReportFilter(user: AuthUser): Prisma.InspectionReportWhereInput | undefined {
+  if (user.role !== UserRole.INSPECTOR || roleHasPermission(user.role, 'jobs:view_all')) {
+    return undefined;
+  }
+  return {
+    OR: [
+      { inspection: { inspectorId: user.id } },
+      { inspection: { job: { assignedInspectorId: user.id } } },
+    ],
+  };
+}
+
 async function generatePdfBuffer(
   reportType: ReportType,
   ctx: ReportRenderContext,
@@ -247,8 +288,11 @@ export async function listReports(
   const search = query.search?.trim();
   const inspectionId = query.inspectionId?.trim();
 
+  const inspectorFilter = inspectorReportFilter(user);
+
   const where: Prisma.InspectionReportWhereInput = {
     companyId,
+    ...(inspectorFilter ?? {}),
     ...(status ? { status: status as ReportStatus } : {}),
     ...(inspectionId ? { inspectionId } : {}),
     ...(search
@@ -282,22 +326,13 @@ export async function listReports(
 }
 
 export async function getReport(user: AuthUser, id: string): Promise<ReportSummary> {
-  const companyId = scopedCompanyId(user);
-  const row = await prisma.inspectionReport.findFirst({
-    where: { id, companyId },
-    include: reportInclude,
-  });
-  if (!row) throw new NotFoundError('Report not found');
+  const row = await loadReportRow(user, id);
   return mapReport(row);
 }
 
 export async function getReportFilePath(user: AuthUser, id: string): Promise<{ path: string; fileName: string }> {
-  const companyId = scopedCompanyId(user);
-  const row = await prisma.inspectionReport.findFirst({
-    where: { id, companyId, status: ReportStatus.READY },
-    select: { filePath: true, fileName: true },
-  });
-  if (!row?.filePath) throw new NotFoundError('Report file not found');
+  const row = await loadReportRow(user, id, { status: ReportStatus.READY });
+  if (!row.filePath) throw new NotFoundError('Report file not found');
   return { path: join(REPORTS_STORAGE_ROOT, row.filePath), fileName: row.fileName };
 }
 
@@ -319,6 +354,7 @@ export async function generateInspectionReports(
   const types = reportTypesForJob(inspection.job.type);
   const ctx = await buildRenderContext(inspection);
   const results: ReportSummary[] = [];
+  let clientReportSmsSent = false;
 
   for (const reportType of types) {
     const fileName = reportFileName(inspection.inspectionNumber, reportType);
@@ -369,6 +405,60 @@ export async function generateInspectionReports(
         include: reportInclude,
       });
       results.push(mapReport(updated));
+
+      if (isEmailConfigured() && updated.status === ReportStatus.READY && updated.filePath) {
+        const clientEmail = inspection.job.clientContact?.email?.trim();
+        if (clientEmail) {
+          try {
+            const emailContext = await loadCompanyEmailContext(companyId);
+            const company = inspection.company;
+            const pdfBuffer = await readFile(join(REPORTS_STORAGE_ROOT, updated.filePath));
+            await trySendCompanyEmail({
+              context: emailContext,
+              toEmail: clientEmail,
+              templateKey: 'reportReady',
+              variables: {
+                clientName: inspection.job.clientContact?.firstName
+                  ? `${inspection.job.clientContact.firstName} ${inspection.job.clientContact.lastName ?? ''}`.trim()
+                  : inspection.job.clientContact?.lastName ?? 'Client',
+                propertyAddress: inspection.job.property
+                  ? formatPropertyAddress(inspection.job.property)
+                  : '—',
+                jobNumber: inspection.job.jobNumber,
+                inspectionNumber: inspection.inspectionNumber,
+                companyPhone: company.phone ?? '',
+              },
+              attachments: [{ filename: updated.fileName, content: pdfBuffer }],
+            });
+          } catch {
+            // Client report email is best-effort; PDF generation already succeeded.
+          }
+        }
+      }
+
+      if (!clientReportSmsSent && updated.status === ReportStatus.READY) {
+        clientReportSmsSent = true;
+        const clientName = inspection.job.clientContact?.firstName
+          ? `${inspection.job.clientContact.firstName} ${inspection.job.clientContact.lastName ?? ''}`.trim()
+          : inspection.job.clientContact?.lastName ?? 'Client';
+        void notifyClientSms(
+          companyId,
+          {
+            phone: inspection.job.clientContact?.phone,
+            contactId: inspection.job.clientContactId,
+          },
+          'reportReady',
+          {
+            clientName,
+            propertyAddress: inspection.job.property
+              ? formatPropertyAddress(inspection.job.property)
+              : '—',
+            jobNumber: inspection.job.jobNumber,
+            companyName: inspection.company.name,
+            companyPhone: inspection.company.phone ?? '',
+          },
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'PDF generation failed';
       const failed = await prisma.inspectionReport.update({

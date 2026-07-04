@@ -33,6 +33,10 @@
     @apply mb-2 border-b border-primary/25 pb-1.5 text-base font-semibold text-primary;
   }
 
+  .inspection-section-heading {
+    @apply mb-4 border-b-2 border-primary/30 pb-2 text-lg font-bold text-primary;
+  }
+
   .inspection-field-label {
     @apply mb-1.5 block text-base font-semibold text-primary;
   }

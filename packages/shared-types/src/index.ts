@@ -10,4 +10,7 @@ export * from './inspections.js';
 export * from './reports.js';
 export * from './invoices.js';
 export * from './notifications.js';
+export * from './calendar.js';
+export * from './search.js';
+export * from './portal.js';
 export * from './company-branding.js';

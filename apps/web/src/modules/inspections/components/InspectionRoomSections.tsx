@@ -34,7 +34,7 @@ export function InspectionRoomSections({
     <div className="space-y-8">
       {bathrooms.length > 0 && (
         <section className="space-y-4">
-          <h3 className="text-lg font-semibold text-text">Bathrooms</h3>
+          <h3 className="inspection-section-heading">Bathrooms</h3>
           {bathrooms.map((room) => (
             <div key={room.id}>
               <InspectionSubsectionHeading as="h4" className="mb-3">{room.label}</InspectionSubsectionHeading>
@@ -50,7 +50,7 @@ export function InspectionRoomSections({
 
       {bedrooms.length > 0 && (
         <section className="space-y-4">
-          <h3 className="text-lg font-semibold text-text">Bedrooms</h3>
+          <h3 className="inspection-section-heading">Bedrooms</h3>
           {bedrooms.map((room) => (
             <div key={room.id}>
               <InspectionSubsectionHeading as="h4" className="mb-3">{room.label}</InspectionSubsectionHeading>
@@ -66,7 +66,7 @@ export function InspectionRoomSections({
 
       {living.length > 0 && (
         <section className="space-y-4">
-          <h3 className="text-lg font-semibold text-text">Living Areas</h3>
+          <h3 className="inspection-section-heading">Living Areas</h3>
           {living.map((room) => {
             const livingData = room.data as unknown as LivingRoomData;
             return (
@@ -85,7 +85,7 @@ export function InspectionRoomSections({
 
       {garages.length > 0 && (
         <section className="space-y-4">
-          <h3 className="text-lg font-semibold text-text">Garage</h3>
+          <h3 className="inspection-section-heading">Garage</h3>
           {garages.map((room) => {
             const garageData = room.data as unknown as GarageRoomData;
             return (

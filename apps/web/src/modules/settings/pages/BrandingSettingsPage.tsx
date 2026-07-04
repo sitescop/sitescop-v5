@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { settingsApi } from '@/lib/api/settings';
 import { useFormErrors } from '@/lib/hooks/useFormErrors';
-import { Input, Textarea } from '@/design-system/components';
+import { Button, Card, Input, Textarea } from '@/design-system/components';
 import { SettingsFormCard, useSettingsForm } from './CompanySettingsPage';
 
 function PreferencesPage({
@@ -108,9 +108,33 @@ export function EmailSettingsPage() {
 }
 
 export function SmsSettingsPage() {
-  const { data } = useSettingsForm();
+  const { data, canManage } = useSettingsForm();
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsSenderId, setSmsSenderId] = useState('');
+  const [testPhone, setTestPhone] = useState('');
+  const [testMessage, setTestMessage] = useState('');
+  const [testError, setTestError] = useState('');
+
+  const statusQuery = useQuery({
+    queryKey: ['settings', 'sms-status'],
+    queryFn: () => settingsApi.getSmsStatus(),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: () => settingsApi.sendTestSms({ toPhone: testPhone.trim() }),
+    onSuccess: (result) => {
+      setTestError('');
+      setTestMessage(
+        result.sent
+          ? `Test SMS sent to ${result.toPhone}.`
+          : `SMS not sent${result.error ? `: ${result.error}` : '.'}`,
+      );
+    },
+    onError: (error) => {
+      setTestMessage('');
+      setTestError(error instanceof Error ? error.message : 'Test SMS failed.');
+    },
+  });
 
   useEffect(() => {
     if (!data) return;
@@ -118,21 +142,76 @@ export function SmsSettingsPage() {
     setSmsSenderId(data.preferences.smsSenderId ?? '');
   }, [data]);
 
+  const twilioReady = statusQuery.data?.twilio.configured ?? false;
+
   return (
-    <PreferencesPage
-      title="SMS"
-      description="SMS notifications and sender configuration"
-      buildPayload={() => ({ smsEnabled, smsSenderId })}
-      renderFields={({ disabled }) => (
-        <>
-          <label className="flex items-center gap-2 text-sm text-text">
-            <input type="checkbox" checked={smsEnabled} onChange={(e) => setSmsEnabled(e.target.checked)} disabled={disabled} />
-            Enable SMS notifications
-          </label>
-          <Input label="Sender ID" value={smsSenderId} onChange={(e) => setSmsSenderId(e.target.value)} disabled={disabled} />
-        </>
-      )}
-    />
+    <div className="space-y-6">
+      <PreferencesPage
+        title="SMS"
+        description="SMS notifications via Twilio (agreement links, invoices, report ready, job reminders)"
+        buildPayload={() => ({ smsEnabled, smsSenderId })}
+        renderFields={({ disabled }) => (
+          <>
+            <label className="flex items-center gap-2 text-sm text-text">
+              <input type="checkbox" checked={smsEnabled} onChange={(e) => setSmsEnabled(e.target.checked)} disabled={disabled} />
+              Enable SMS notifications for this company
+            </label>
+            <Input
+              label="Sender ID (optional label)"
+              value={smsSenderId}
+              onChange={(e) => setSmsSenderId(e.target.value)}
+              disabled={disabled}
+              placeholder="SiteScop"
+            />
+            <p className="text-xs text-text-muted">
+              Twilio sends from <code className="text-text">TWILIO_FROM_NUMBER</code> in the server{' '}
+              <code className="text-text">.env</code>. Clients must have a mobile on their contact record.
+            </p>
+          </>
+        )}
+      />
+
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-text">Twilio status</h3>
+        {statusQuery.isLoading ? (
+          <p className="mt-2 text-sm text-text-light">Checking configuration…</p>
+        ) : (
+          <div className="mt-3 space-y-2 text-sm">
+            <p className={twilioReady ? 'text-success' : 'text-danger'}>
+              {twilioReady
+                ? `Configured — sending from ${statusQuery.data?.twilio.fromNumber}`
+                : statusQuery.data?.twilio.reason ?? 'Twilio is not configured.'}
+            </p>
+            <p className="text-text-light">
+              Company SMS: {statusQuery.data?.companyEnabled ? 'enabled' : 'disabled'}
+            </p>
+          </div>
+        )}
+
+        {canManage && (
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <Input
+              label="Test mobile"
+              value={testPhone}
+              onChange={(e) => setTestPhone(e.target.value)}
+              placeholder="0412 345 678"
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              isLoading={testMutation.isPending}
+              disabled={!testPhone.trim()}
+              onClick={() => testMutation.mutate()}
+            >
+              Send test SMS
+            </Button>
+          </div>
+        )}
+        {testMessage && <p className="mt-3 text-sm text-success">{testMessage}</p>}
+        {testError && <p className="mt-3 text-sm text-danger">{testError}</p>}
+      </Card>
+    </div>
   );
 }
 

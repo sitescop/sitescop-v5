@@ -20,6 +20,15 @@ import {
 } from '../../shared/scoping/company-scope.js';
 import { prisma } from '../../shared/database/prisma.js';
 import { syncLegacyDemoBrandingIfNeeded } from '../../shared/branding/sync-legacy-demo-branding.js';
+import {
+  getSmtpConfigStatus,
+  sendSmtpTestEmail,
+  verifySmtpConnection,
+} from '../../shared/email/email.service.js';
+import {
+  getTwilioConfigStatus,
+  sendTwilioTestSms,
+} from '../../shared/sms/sms.service.js';
 
 const profileSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -132,6 +141,106 @@ function mapPreferences(settings: CompanySettings): CompanyPreferences {
     backupEnabled: settings.backupEnabled,
     backupFrequency: settings.backupFrequency,
   };
+}
+
+const testEmailSchema = z.object({
+  toEmail: z.string().email().optional(),
+});
+
+const testSmsSchema = z.object({
+  toPhone: z.string().min(8).max(30),
+});
+
+export async function getEmailDeliveryStatus(user: AuthUser) {
+  const companyId = requireCompanyId(user);
+  const smtp = getSmtpConfigStatus();
+  const connection = smtp.configured
+    ? await verifySmtpConnection()
+    : { ok: false as const, error: smtp.reason ?? 'SMTP not configured' };
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { email: true },
+  });
+
+  return {
+    smtp,
+    connection,
+    fromAddress: company?.email ?? null,
+  };
+}
+
+export async function sendTestEmail(
+  user: AuthUser,
+  input: { toEmail?: string },
+  request?: import('fastify').FastifyRequest,
+) {
+  const companyId = requireCompanyId(user);
+  assertCanManageCompany(user, companyId);
+  const { toEmail } = testEmailSchema.parse(input);
+
+  const company = await prisma.company.findUniqueOrThrow({
+    where: { id: companyId },
+    select: { email: true },
+  });
+
+  const recipient = toEmail ?? company.email;
+  if (!recipient) {
+    throw new ForbiddenError('Provide toEmail or set company email in Settings.');
+  }
+
+  const result = await sendSmtpTestEmail(companyId, recipient);
+
+  await createAuditLog({
+    companyId,
+    actorId: user.id,
+    action: 'email.test_sent',
+    entityType: 'Company',
+    entityId: companyId,
+    metadata: { toEmail: recipient, success: result.sent, error: result.error },
+    request,
+  });
+
+  return { toEmail: recipient, ...result };
+}
+
+export async function getSmsDeliveryStatus(user: AuthUser) {
+  const companyId = requireCompanyId(user);
+  const twilio = getTwilioConfigStatus();
+  const settings = await prisma.companySettings.findUnique({
+    where: { companyId },
+    select: { smsEnabled: true, smsSenderId: true },
+  });
+
+  return {
+    twilio,
+    companyEnabled: settings?.smsEnabled ?? false,
+    senderId: settings?.smsSenderId ?? null,
+  };
+}
+
+export async function sendTestSms(
+  user: AuthUser,
+  input: { toPhone: string },
+  request?: import('fastify').FastifyRequest,
+) {
+  const companyId = requireCompanyId(user);
+  assertCanManageCompany(user, companyId);
+  const { toPhone } = testSmsSchema.parse(input);
+
+  const result = await sendTwilioTestSms(companyId, toPhone);
+
+  await createAuditLog({
+    companyId,
+    actorId: user.id,
+    action: 'sms.test_sent',
+    entityType: 'Company',
+    entityId: companyId,
+    metadata: { toPhone, success: result.sent, error: result.error },
+    request,
+  });
+
+  return { toPhone, ...result };
 }
 
 async function getOrCreateSettings(companyId: string): Promise<CompanySettings> {

@@ -31,12 +31,23 @@ import { parsePagination } from '../../shared/http/validation.js';
 import { resolveCompanyScope } from '../../shared/scoping/company-scope.js';
 import { prisma } from '../../shared/database/prisma.js';
 import { getDefaultLegalSections, maskEmail, mergeLegalSections } from './legal/default-templates.js';
-import { loadCompanyEmailContext, sendCompanyEmail } from '../../shared/email/email.service.js';
-import { notifyBillingTeam, notifyOfficeStaff } from '../notifications/notifications.service.js';
+import { loadCompanyEmailContext, sendCompanyEmail, trySendCompanyEmail } from '../../shared/email/email.service.js';
+import { notifyClientSms } from '../../shared/sms/notify-client.js';
+import { notifyBillingTeam, notifyOfficeStaff, createNotification } from '../notifications/notifications.service.js';
 import { createDraftInvoiceForSignedAgreement, trySendInvoiceForAgreement } from '../invoices/invoices.service.js';
 import { findOrCreateClientContact } from '../../shared/crm/find-or-create-client.js';
-import { PENDING_PROPERTY_PLACEHOLDER } from '../../shared/billing/create-job-from-agreement.js';
+import { PENDING_PROPERTY_PLACEHOLDER, createJobFromAgreement, resolveInspectorAssigneeFromAgreement } from '../../shared/billing/create-job-from-agreement.js';
 import { advanceJobAfterBillingComplete } from '../../shared/billing/job-billing-readiness.js';
+
+function resolveClientEmailForAgreement(clientEmail?: string, clientPhone?: string): string {
+  const trimmedEmail = clientEmail?.trim();
+  if (trimmedEmail) return trimmedEmail.toLowerCase();
+
+  const digits = clientPhone?.replace(/\D/g, '') ?? '';
+  if (digits) return `onsite+${digits}@sitescop.local`;
+
+  return `onsite+${Date.now()}@sitescop.local`;
+}
 
 const AGREEMENT_TOKEN_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -63,15 +74,19 @@ export const signAgreementSchema = z.object({
   clientPhone: z.string().max(30).optional(),
 });
 
-export const sendNewAgreementSchema = z.object({
-  type: z.nativeEnum(JobType),
-  clientName: z.string().min(1).max(200),
-  clientEmail: z.string().email(),
-  clientPhone: z.string().max(30).optional(),
-  propertyAddress: z.string().max(500).optional(),
-  priceCents: z.number().int().min(1),
-  notes: z.string().max(5000).optional(),
-});
+export const sendNewAgreementSchema = z
+  .object({
+    type: z.nativeEnum(JobType),
+    clientName: z.string().min(1).max(200),
+    clientEmail: z.string().email().optional().or(z.literal('')),
+    clientPhone: z.string().max(30).optional(),
+    propertyAddress: z.string().max(500).optional(),
+    priceCents: z.number().int().min(1),
+    notes: z.string().max(5000).optional(),
+  })
+  .refine((data) => Boolean(data.clientEmail?.trim() || data.clientPhone?.trim()), {
+    message: 'Client email or mobile is required',
+  });
 
 export const declineAgreementSchema = z.object({
   reason: z.string().max(500).optional(),
@@ -108,7 +123,7 @@ async function generateAgreementNumber(companyId: string): Promise<string> {
   return `${prefix}${String(next).padStart(4, '0')}`;
 }
 
-function mapSummary(row: AgreementRow): AgreementSummary {
+export function mapAgreementSummary(row: AgreementRow): AgreementSummary {
   return {
     id: row.id,
     agreementNumber: row.agreementNumber,
@@ -130,7 +145,7 @@ function mapSummary(row: AgreementRow): AgreementSummary {
 
 function mapDetail(row: AgreementRow): AgreementDetail {
   return {
-    ...mapSummary(row),
+    ...mapAgreementSummary(row),
     clientPhone: row.clientPhone,
     clientContactId: row.clientContactId,
     gstCents: row.gstCents,
@@ -213,7 +228,7 @@ export async function listAgreements(
     prisma.agreement.count({ where }),
   ]);
 
-  return { agreements: rows.map(mapSummary), total, page, pageSize };
+  return { agreements: rows.map(mapAgreementSummary), total, page, pageSize };
 }
 
 export async function getAgreement(user: AuthUser, id: string): Promise<AgreementDetail> {
@@ -289,7 +304,7 @@ export async function createAndSendAgreement(
   const companyId = resolveCompanyScope(user) ?? user.companyId;
   if (!companyId) throw new ForbiddenError('Company required');
 
-  const email = data.clientEmail.toLowerCase().trim();
+  const email = resolveClientEmailForAgreement(data.clientEmail, data.clientPhone);
   const existingContact = await prisma.contact.findFirst({
     where: {
       companyId,
@@ -304,7 +319,7 @@ export async function createAndSendAgreement(
     companyId,
     {
       clientName: data.clientName,
-      clientEmail: data.clientEmail,
+      clientEmail: email,
       clientPhone: data.clientPhone,
     },
     user.id,
@@ -316,10 +331,10 @@ export async function createAndSendAgreement(
   const agreement = await createAgreement(
     user,
     {
-      type: data.type,
+      type: data.type as CreateAgreementRequest['type'],
       clientContactId,
       clientName: data.clientName,
-      clientEmail: data.clientEmail,
+      clientEmail: email,
       clientPhone: data.clientPhone,
       propertyAddress,
       priceCents: data.priceCents,
@@ -490,32 +505,48 @@ export async function sendAgreement(
   });
 
   let emailSent = false;
-  try {
-    const emailContext = await loadCompanyEmailContext(row.companyId);
-    const company = await prisma.company.findUniqueOrThrow({ where: { id: row.companyId } });
-    await sendCompanyEmail({
-      context: emailContext,
-      toEmail: row.clientEmail,
-      templateKey: 'agreementSent',
-      variables: {
-        clientName: row.clientName,
-        companyName: company.name,
-        propertyAddress: row.propertyAddress,
-        agreementNumber: row.agreementNumber,
-        totalAmount: formatAudCents(row.totalCents),
-        signingUrl,
-        companyPhone: company.phone ?? '',
-      },
-    });
-    emailSent = true;
-  } catch {
-    emailSent = false;
-  }
+  let emailError: string | undefined;
+  const emailContext = await loadCompanyEmailContext(row.companyId);
+  const company = await prisma.company.findUniqueOrThrow({ where: { id: row.companyId } });
+  const emailResult = await trySendCompanyEmail({
+    context: emailContext,
+    toEmail: row.clientEmail,
+    templateKey: 'agreementSent',
+    variables: {
+      clientName: row.clientName,
+      companyName: company.name,
+      propertyAddress: row.propertyAddress,
+      agreementNumber: row.agreementNumber,
+      totalAmount: formatAudCents(row.totalCents),
+      signingUrl,
+      companyPhone: company.phone ?? '',
+    },
+  });
+  emailSent = emailResult.sent;
+  emailError = emailResult.error;
+
+  void notifyClientSms(
+    row.companyId,
+    { phone: row.clientPhone, contactId: row.clientContactId },
+    'agreementSent',
+    {
+      clientName: row.clientName,
+      propertyAddress: row.propertyAddress,
+      agreementNumber: row.agreementNumber,
+      signingUrl,
+      companyName: company.name,
+      companyPhone: company.phone ?? '',
+    },
+  );
 
   await notifyOfficeStaff(row.companyId, {
     type: NotificationType.AGREEMENT_SENT,
-    title: `Agreement sent — ${row.agreementNumber}`,
-    body: `Agreement emailed to ${row.clientName} at ${row.clientEmail}.`,
+    title: emailSent
+      ? `Agreement sent — ${row.agreementNumber}`
+      : `Agreement prepared — ${row.agreementNumber}`,
+    body: emailSent
+      ? `Agreement emailed to ${row.clientName} at ${row.clientEmail}.`
+      : `Agreement ready for ${row.clientName}. Email was not sent${emailError ? `: ${emailError}` : '.'}`,
     entityType: 'Agreement',
     entityId: id,
   });
@@ -524,6 +555,7 @@ export async function sendAgreement(
     agreement: mapDetail(row),
     signingUrl,
     emailSent,
+    ...(emailError ? { emailError } : {}),
   };
 
   if (!config.isProduction) {
@@ -643,7 +675,7 @@ export async function signPublicAgreement(
   token: string,
   input: SignAgreementRequest,
   request?: import('fastify').FastifyRequest,
-): Promise<{ success: true; agreementNumber: string }> {
+): Promise<{ success: true; agreementNumber: string; jobId: string | null; jobNumber: string | null }> {
   const data = signAgreementSchema.parse(input);
   const row = await findByToken(token);
 
@@ -688,9 +720,29 @@ export async function signPublicAgreement(
   await createDraftInvoiceForSignedAgreement(row.id, row.companyId, row.createdById);
   await trySendInvoiceForAgreement(row.id, row.companyId, row.createdById);
 
-  const job = row.jobId
-    ? await prisma.job.findUnique({ where: { id: row.jobId }, select: { jobNumber: true } })
+  let jobId = row.jobId;
+  let jobNumber: string | null = null;
+
+  if (!jobId) {
+    const assignInspectorId = await resolveInspectorAssigneeFromAgreement(row.id, row.companyId);
+    if (assignInspectorId) {
+      jobId = await createJobFromAgreement(row.id, row.companyId, row.createdById, assignInspectorId);
+      await createNotification({
+        companyId: row.companyId,
+        userId: assignInspectorId,
+        type: NotificationType.JOB_ASSIGNED,
+        title: 'Client signed — job ready',
+        body: `${row.clientName} signed the agreement. Record payment on-site, then start the inspection.`,
+        entityType: 'Job',
+        entityId: jobId,
+      });
+    }
+  }
+
+  const job = jobId
+    ? await prisma.job.findUnique({ where: { id: jobId }, select: { jobNumber: true } })
     : null;
+  jobNumber = job?.jobNumber ?? null;
 
   await notifyBillingTeam(row.companyId, {
     type: NotificationType.AGREEMENT_SIGNED,
@@ -721,11 +773,11 @@ export async function signPublicAgreement(
     // Office email is best-effort; in-app notification already recorded.
   }
 
-  if (row.jobId) {
-    await advanceJobAfterBillingComplete(row.jobId, row.companyId);
+  if (jobId) {
+    await advanceJobAfterBillingComplete(jobId, row.companyId);
   }
 
-  return { success: true, agreementNumber: row.agreementNumber };
+  return { success: true, agreementNumber: row.agreementNumber, jobId, jobNumber };
 }
 
 export async function declinePublicAgreement(

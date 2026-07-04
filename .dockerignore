@@ -1,0 +1,14 @@
+node_modules
+.git
+.sitescop
+**/.turbo
+**/dist
+apps/web/dist
+apps/api/storage/reports
+.env
+.env.*
+!.env.production.example
+*.log
+.cursor
+coverage
+.DS_Store

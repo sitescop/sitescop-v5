@@ -56,12 +56,21 @@ export function InspectionsListPage() {
         key: 'client',
         header: 'Client',
         hideOnMobile: true,
-        render: (row: InspectionSummary) => row.clientName ?? '—',
+        render: (row: InspectionSummary) => (
+          <div>
+            <p className="font-medium text-text">{row.clientName ?? '—'}</p>
+            {row.clientPhone && (
+              <p className="text-sm font-medium text-primary">{row.clientPhone}</p>
+            )}
+          </div>
+        ),
       },
       {
         key: 'type',
         header: 'Type',
-        render: (row: InspectionSummary) => JOB_TYPE_LABELS[row.jobType],
+        render: (row: InspectionSummary) => (
+          <span className="font-bold uppercase text-danger">{JOB_TYPE_LABELS[row.jobType]}</span>
+        ),
       },
       {
         key: 'status',

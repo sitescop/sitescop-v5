@@ -4,6 +4,7 @@ import type Transporter from 'nodemailer/lib/mailer/index.js';
 import { config } from '../../config.js';
 import { prisma } from '../database/prisma.js';
 import { AppError } from '../http/errors.js';
+import { getSmtpConfigStatus, isEmailConfigured } from './email-config.js';
 import {
   DEFAULT_EMAIL_TEMPLATES,
   EMAIL_SUBJECTS,
@@ -12,29 +13,6 @@ import {
 import { renderEmailSubject, renderEmailTemplate } from './template-renderer.js';
 
 let transporter: Transporter | null = null;
-
-function getTransporter(): Transporter {
-  if (!config.emailEnabled) {
-    throw new AppError(
-      'Email is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables.',
-      'EMAIL_NOT_CONFIGURED',
-    );
-  }
-  if (!transporter) {
-    const auth =
-      config.smtp.user && config.smtp.pass
-        ? { user: config.smtp.user, pass: config.smtp.pass }
-        : undefined;
-
-    transporter = nodemailer.createTransport({
-      host: config.smtp.host,
-      port: config.smtp.port,
-      secure: config.smtp.secure,
-      ...(auth ? { auth } : {}),
-    });
-  }
-  return transporter;
-}
 
 export interface CompanyEmailContext {
   companyId: string;
@@ -52,6 +30,46 @@ export interface SendCompanyEmailInput {
   attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }
 
+export { getSmtpConfigStatus, isEmailConfigured };
+
+function getTransporter(): Transporter {
+  const smtpStatus = getSmtpConfigStatus();
+  if (!smtpStatus.configured) {
+    throw new AppError(smtpStatus.reason ?? 'Email is not configured.', 'EMAIL_NOT_CONFIGURED');
+  }
+
+  if (!transporter) {
+    const auth =
+      config.smtp.user && config.smtp.pass
+        ? { user: config.smtp.user, pass: config.smtp.pass }
+        : undefined;
+
+    transporter = nodemailer.createTransport({
+      host: config.smtp.host,
+      port: config.smtp.port,
+      secure: config.smtp.secure,
+      ...(auth ? { auth } : {}),
+    });
+  }
+
+  return transporter;
+}
+
+export async function verifySmtpConnection(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const smtpStatus = getSmtpConfigStatus();
+  if (!smtpStatus.configured) {
+    return { ok: false, error: smtpStatus.reason ?? 'SMTP is not configured.' };
+  }
+
+  try {
+    await getTransporter().verify();
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'SMTP verification failed';
+    return { ok: false, error: message };
+  }
+}
+
 export async function loadCompanyEmailContext(companyId: string): Promise<CompanyEmailContext> {
   const [company, settings] = await Promise.all([
     prisma.company.findUniqueOrThrow({ where: { id: companyId } }),
@@ -61,7 +79,10 @@ export async function loadCompanyEmailContext(companyId: string): Promise<Compan
   const fromName = settings?.emailFromName ?? company.name;
   const fromAddress = settings?.emailFromAddress ?? company.email ?? '';
   if (!fromAddress) {
-    throw new AppError('Company email from address is not configured in Settings', 'EMAIL_NOT_CONFIGURED');
+    throw new AppError(
+      'Company "From" email is not configured. Set it in Settings → Company.',
+      'EMAIL_NOT_CONFIGURED',
+    );
   }
 
   return {
@@ -73,7 +94,9 @@ export async function loadCompanyEmailContext(companyId: string): Promise<Compan
   };
 }
 
-export async function sendCompanyEmail(input: SendCompanyEmailInput): Promise<{ sent: boolean; messageId: string | null }> {
+export async function sendCompanyEmail(
+  input: SendCompanyEmailInput,
+): Promise<{ sent: boolean; messageId: string | null }> {
   const { context, toEmail, templateKey, variables, attachments } = input;
   const bodyTemplate = context.customTemplates[templateKey] ?? DEFAULT_EMAIL_TEMPLATES[templateKey];
   const subjectTemplate = EMAIL_SUBJECTS[templateKey];
@@ -145,7 +168,38 @@ export async function trySendCompanyEmail(
     const result = await sendCompanyEmail(input);
     return { sent: result.sent };
   } catch (error) {
+    if (error instanceof AppError) {
+      return { sent: false, error: error.message };
+    }
     const message = error instanceof Error ? error.message : 'Email send failed';
     return { sent: false, error: message };
   }
+}
+
+export async function sendSmtpTestEmail(
+  companyId: string,
+  toEmail: string,
+): Promise<{ sent: boolean; error?: string }> {
+  const context = await loadCompanyEmailContext(companyId);
+  const smtpStatus = getSmtpConfigStatus();
+
+  return trySendCompanyEmail({
+    context,
+    toEmail,
+    templateKey: 'agreementSent',
+    variables: {
+      clientName: 'SMTP Test',
+      companyName: context.fromName,
+      propertyAddress: 'Test message — SMTP configuration verified',
+      agreementNumber: 'TEST-0001',
+      totalAmount: '$0.00',
+      signingUrl: config.webAppUrl,
+      companyPhone: '',
+    },
+  }).then((result) => {
+    if (!result.sent && !result.error && smtpStatus.reason) {
+      return { sent: false, error: smtpStatus.reason };
+    }
+    return result;
+  });
 }
